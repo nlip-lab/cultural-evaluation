@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this code or benchmark, please cite the paper below."
+type: software
+title: "Lost in Localization: Benchmarking Intralingual Cultural Adaptation in Large Language Models"
+abstract: >
+  CulturalAdapt-6K is a 6,000-item benchmark for evaluating function-preserving
+  intralingual cultural adaptation (American→Indian). This repository contains
+  the dataset construction pipeline, adaptation generation code for eight
+  instruction-tuned LLMs, and a seven-phase CSI-level evaluation framework
+  grounded in the Intercultural Adaptation Error Taxonomy (IAET).
+authors:
+  - name: "Anonymous Authors"
+keywords:
+  - cultural adaptation
+  - natural language processing
+  - large language models
+  - benchmark
+  - evaluation
+  - cultural NLP
+  - intralingual adaptation
+license: MIT
+preferred-citation:
+  type: conference-paper
+  title: "Lost in Localization: Benchmarking Intralingual Cultural Adaptation in Large Language Models"
+  authors:
+    - name: "Anonymous Authors"
+  conference:
+    name: "Annual Meeting of the Association for Computational Linguistics"
+    abbreviation: ACL
+  year: 2025
+  notes: "Anonymous submission"
