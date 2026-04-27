@@ -1,0 +1,66 @@
+You are evaluating a cultural adaptation from American English to Indian English.
+
+SOURCE TEXT (American context):
+{source_text}
+
+ADAPTED TEXT (intended Indian context):
+{adapted_text}
+
+DOMAIN: {domain}
+
+SOURCE CSI INVENTORY (items identified as culturally loaded in the source):
+{source_csis_json}
+
+YOUR TASK: For each source CSI, determine what happened to it in the adapted text.
+Also identify any NEW target-culture items in the adapted text that are not traceable
+to any source CSI.
+
+For each SOURCE CSI, return:
+{
+  "source_span": "<original CSI span>",
+  "adapted_span": "<corresponding span in adapted text, or null if omitted>",
+  "adapted_char_start": <int or null>,
+  "adapted_char_end": <int or null>,
+  "strategy": "<one of the strategies below>",
+  "validity_note": "<1-sentence note on whether the replacement makes sense>"
+}
+
+STRATEGY labels:
+- "retained": Source CSI appears unchanged or near-unchanged in the adapted text
+- "localized": Replaced with a specific Indian-culture equivalent
+- "globalized": Replaced with a culture-neutral or universal alternative
+- "transformed": Substantially restructured; function is preserved but form is very different
+- "omitted": The CSI is removed with no replacement
+- "distorted": A replacement exists but it clearly does not serve the same function
+
+Also return a list of UNSUPPORTED ADDITIONS:
+{
+  "added_span": "<new Indian-culture span not traceable to any source CSI>",
+  "char_start": <int>,
+  "char_end": <int>,
+  "category": "<CSI category>",
+  "justified": <boolean, true if it replaces implicit cultural context rather than explicit CSIs>
+}
+
+Return the complete result as:
+{
+  "csi_alignments": [... one per source CSI ...],
+  "unsupported_additions": [... zero or more ...],
+  "source_csis_total": <int>,
+  "retained_count": <int>,
+  "localized_count": <int>,
+  "globalized_count": <int>,
+  "transformed_count": <int>,
+  "omitted_count": <int>,
+  "distorted_count": <int>
+}
+
+IMPORTANT RULES:
+- csi_alignments must have exactly one entry per source CSI, in the same order as the input.
+- adapted_char_start and adapted_char_end must refer to character offsets in the ADAPTED TEXT (0-indexed). Verify the span exists at those offsets.
+- If a source CSI is entirely absent from the adapted text, set adapted_span=null, adapted_char_start=null, adapted_char_end=null, and strategy="omitted".
+- Use "distorted" only if a replacement exists but clearly fails (wrong currency system, factually wrong equivalent, etc.).
+- unsupported_additions should only include spans that carry new Indian cultural content not directly mappable to any source CSI.
+- All counts (retained_count, localized_count, etc.) must sum to source_csis_total.
+
+Return ONLY valid JSON, no other text.

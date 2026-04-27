@@ -1,0 +1,67 @@
+You are evaluating whether cultural substitutions in an American-to-Indian adaptation are VALID.
+
+SOURCE TEXT: {source_text}
+ADAPTED TEXT: {adapted_text}
+DOMAIN: {domain}
+
+You will evaluate up to 3 substitutions. For EACH substitution, score it on 5 dimensions (0.0-1.0) and return a JSON object.
+
+SUBSTITUTIONS TO EVALUATE:
+{substitutions_json}
+
+Each substitution has:
+- source_span: the original American cultural item
+- adapted_span: what replaced it in the adaptation (null if omitted)
+- strategy: what kind of change was made
+- contextual_function: what job the source CSI does in the text
+- required_affordances: properties a valid replacement must have
+- category: CSI category
+
+For EACH substitution return:
+{
+  "source_span": "<echo back the source_span>",
+  "affordance_validity": {
+    "score": <0.0-1.0>,
+    "rationale": "<Can the replacement physically/functionally do the same job in Indian context?>"
+  },
+  "scale_transfer": {
+    "score": <0.0-1.0>,
+    "rationale": "<Were numbers, units, prices converted correctly? Score 1.0 if not applicable.>"
+  },
+  "dependency_propagation": {
+    "score": <0.0-1.0>,
+    "rationale": "<Did linked elements also update consistently? Score 1.0 if no dependencies.>"
+  },
+  "identity_marker_fit": {
+    "score": <0.0-1.0>,
+    "rationale": "<Do names, titles, kinship terms fit Indian context? Score 1.0 if not applicable.>"
+  },
+  "figurative_equivalence": {
+    "score": <0.0-1.0>,
+    "rationale": "<Was the idiom/metaphor adapted for equivalent effect? Score 1.0 if not figurative.>"
+  },
+  "overall_c2_score": <0.0-1.0, weighted: affordance x 0.35 + scale x 0.30 + dependency x 0.15 + identity x 0.10 + figurative x 0.10>,
+  "c2_subtype": "<most prominent failure subtype or 'none'>",
+  "c2_severity": "<none | surface | substantive | critical>"
+}
+
+C2 SUBTYPE OPTIONS:
+- "none": substitution is valid
+- "C2.1_affordance_violation": replacement cannot do the same job (wrong type of thing)
+- "C2.2_scale_transfer_error": numbers/units/prices not converted properly
+- "C2.3_dependency_propagation_failure": other linked elements not updated to match
+- "C2.4_identity_marker_mismatch": name/title/kinship does not fit Indian context
+- "C2.5_figurative_equivalence_failure": idiom/metaphor not adapted for equivalent cultural effect
+
+SEVERITY GUIDE:
+- none: score >= 0.8
+- surface: score 0.5-0.79 (minor awkwardness, meaning intact)
+- substantive: score 0.3-0.49 (noticeable error, meaning partially degraded)
+- critical: score < 0.3 (meaning or arithmetic broken)
+
+SPECIAL RULES:
+- If adapted_span is null and strategy is "omitted": score all dimensions 1.0 (omission itself is a scope decision, not a validity failure - RF captures that separately).
+- If strategy is "retained" and necessity is "must_adapt": set overall_c2_score = 0.0, c2_subtype = "C2.1_affordance_violation", c2_severity = "critical".
+- If strategy is "globalized": affordance_validity should reflect whether the neutral replacement preserves the function.
+
+Return ONLY a JSON array with one object per substitution, in the same order as input.

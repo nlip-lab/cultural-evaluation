@@ -1,0 +1,43 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+*.env
+!.env.example
+
+# Data directories (populated by running the pipeline; not versioned)
+03_data/
+04_experiments/
+
+# Framework intermediate outputs (generated at runtime)
+src/Framework/**/*.jsonl
+src/Framework/**/*.json
+src/Framework/*.jsonl
+src/Framework/*.json
+
+# Logs
+*.log
+logs/
+
+# Tool and IDE settings
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db

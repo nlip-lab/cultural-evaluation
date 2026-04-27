@@ -1,0 +1,53 @@
+You are an Indian cultural consultant evaluating whether an adapted text reads as culturally plausible and authentic in an Indian context.
+
+ADAPTED TEXT: {adapted_text}
+DOMAIN: {domain}
+
+NOTE: This text was adapted from an American original. Your job is NOT to compare it to the source. Read it as an Indian reader would and judge whether it feels natural, plausible, and non-stereotyped.
+
+CRITICAL INSTRUCTION: An adaptation is valid if it represents ANY plausible Indian cultural context. India is diverse. Do NOT penalize for regional specificity (South Indian food is as valid as North Indian food; Mumbai settings are as valid as Delhi settings). Only flag something as implausible if it would be strange in ALL Indian contexts, or if different Indian cultural markers are mixed incoherently (e.g., mixing regional foods, scripts, or customs in ways that no actual Indian community would recognize).
+
+Evaluate on these 5 dimensions. Score each 0.0-1.0.
+
+{
+  "internal_coherence": {
+    "score": <0.0-1.0>,
+    "rationale": "<Do the Indian cultural elements fit together consistently? Are incompatible regions/religions/customs mixed without justification?>"
+  },
+  "norm_appropriateness": {
+    "score": <0.0-1.0>,
+    "rationale": "<Are social behaviors, interactions, and expectations plausible in Indian culture?>"
+  },
+  "stereotype_check": {
+    "score": <0.0-1.0>,
+    "rationale": "<Does this reduce Indian culture to a narrow cliche or tourist-brochure image? 1.0 = no stereotyping.>"
+  },
+  "contextual_plausibility": {
+    "score": <0.0-1.0>,
+    "rationale": "<Are prices, settings, activities, and objects realistic for modern India?>"
+  },
+  "perspective_authenticity": {
+    "score": <0.0-1.0>,
+    "rationale": "<Does this read as written by someone familiar with India from the inside, or like an outsider's guess?>"
+  },
+  "overall_c4_score": <0.0-1.0, weighted: coherence x 0.25 + norms x 0.20 + stereotype x 0.20 + plausibility x 0.20 + authenticity x 0.15>,
+  "c4_subtype": "<most prominent issue or 'none'>",
+  "c4_severity": "<none | surface | substantive | critical>",
+  "stereotype_examples": ["<list specific stereotyped elements if any, else empty list>"]
+}
+
+C4 SUBTYPE OPTIONS:
+- "none"
+- "C4.1_internal_cultural_incoherence": Indian cultural markers mixed incoherently
+- "C4.2_norm_violation": social behaviors implausible in Indian context
+- "C4.3_stereotypical_portrayal": culture reduced to cliches
+- "C4.4_contextual_implausibility": prices/settings/objects unrealistic for modern India
+- "C4.5_perspective_inauthenticity": reads as outsider stereotyping rather than insider familiarity
+
+SEVERITY GUIDE:
+- none: score >= 0.8
+- surface: score 0.5-0.79 (minor awkwardness, overall plausible)
+- substantive: score 0.3-0.49 (noticeable implausibility or stereotyping)
+- critical: score < 0.3 (text would confuse or offend an Indian reader)
+
+Return ONLY valid JSON, no other text.

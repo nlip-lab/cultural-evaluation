@@ -1,0 +1,193 @@
+You are a cultural linguistics expert specializing in American and Indian cultures.
+
+TASK: Extract all Culture-Specific Items (CSIs) from the following American-context text. A CSI is any span that carries American cultural meaning and would need adaptation for an Indian audience.
+
+TEXT:
+{source_text}
+
+DOMAIN: {domain}
+
+For each CSI found, return a JSON object. Return ONLY a JSON array, no other text.
+
+Each CSI object must have exactly these fields:
+{
+  "span": "<exact text span from the source>",
+  "char_start": <integer start position>,
+  "char_end": <integer end position>,
+  "category": "<one of: food_drink, place_institution_brand, unit_currency_scale, holiday_event_ritual, personal_name_identity, social_norm_address, pop_culture_sport_media, idiom_figurative>",
+  "adaptation_necessity": "<one of: must_adapt, may_adapt, should_retain>",
+  "salience": <float 0.0-1.0, how important this CSI is to the text's meaning>,
+  "local_role": "<1-sentence description of what this CSI is doing in this specific text>",
+  "scale_sensitive": <boolean, true if numeric conversion is needed>,
+  "figurative": <boolean, true if idiomatic or metaphorical>,
+  "dependencies": ["<spans of other CSIs that must change if this one changes>"]
+}
+
+CATEGORY DEFINITIONS:
+- food_drink: foods, beverages, dishes, dietary items with cultural specificity
+- place_institution_brand: stores, schools, cities, brands, organizations
+- unit_currency_scale: measurement units, currency, temperature, dress sizes
+- holiday_event_ritual: holidays, celebrations, cultural events, rites
+- personal_name_identity: given names, surnames, kinship terms, titles
+- social_norm_address: greetings, politeness conventions, social scripts
+- pop_culture_sport_media: TV shows, sports teams, celebrities, music
+- idiom_figurative: idioms, proverbs, metaphors, culturally loaded phrases
+
+ADAPTATION_NECESSITY RULES:
+- must_adapt: The text is incomprehensible or misleading for an Indian reader without change
+- may_adapt: Adaptation would improve naturalness but the text is still understandable without it
+- should_retain: Universal or already culturally neutral; changing it would distort meaning
+
+SALIENCE RULES:
+- 0.8-1.0: Central to the text's purpose (e.g., the main ingredient in a recipe, the holiday driving a story's plot)
+- 0.5-0.7: Important but not structurally central
+- 0.1-0.4: Background detail, flavor text
+
+FEW-SHOT EXAMPLES:
+
+Example 1
+TEXT: Trevor spent $20 at Walmart to buy pumpkin pie for Thanksgiving dinner.
+DOMAIN: rocstories
+OUTPUT:
+[
+  {
+    "span": "$20",
+    "char_start": 14,
+    "char_end": 17,
+    "category": "unit_currency_scale",
+    "adaptation_necessity": "must_adapt",
+    "salience": 0.7,
+    "local_role": "Specifies the shopping amount and may require currency conversion for a local reader.",
+    "scale_sensitive": true,
+    "figurative": false,
+    "dependencies": []
+  },
+  {
+    "span": "Walmart",
+    "char_start": 21,
+    "char_end": 28,
+    "category": "place_institution_brand",
+    "adaptation_necessity": "may_adapt",
+    "salience": 0.6,
+    "local_role": "Anchors the purchase in a familiar big-box American retail setting.",
+    "scale_sensitive": false,
+    "figurative": false,
+    "dependencies": []
+  },
+  {
+    "span": "pumpkin pie",
+    "char_start": 36,
+    "char_end": 47,
+    "category": "food_drink",
+    "adaptation_necessity": "may_adapt",
+    "salience": 0.7,
+    "local_role": "Identifies the culturally marked dessert being bought for the meal.",
+    "scale_sensitive": false,
+    "figurative": false,
+    "dependencies": ["Thanksgiving"]
+  },
+  {
+    "span": "Thanksgiving",
+    "char_start": 52,
+    "char_end": 64,
+    "category": "holiday_event_ritual",
+    "adaptation_necessity": "must_adapt",
+    "salience": 0.95,
+    "local_role": "Provides the holiday occasion that motivates the dinner and the food choice.",
+    "scale_sensitive": false,
+    "figurative": false,
+    "dependencies": ["pumpkin pie"]
+  }
+]
+
+Example 2
+TEXT: Coach said the team needed a Hail Mary in the final minute.
+DOMAIN: dailydialog
+OUTPUT:
+[
+  {
+    "span": "Hail Mary",
+    "char_start": 31,
+    "char_end": 40,
+    "category": "idiom_figurative",
+    "adaptation_necessity": "may_adapt",
+    "salience": 0.85,
+    "local_role": "Conveys that the team needs a desperate last-chance play rather than a literal religious reference.",
+    "scale_sensitive": false,
+    "figurative": true,
+    "dependencies": []
+  }
+]
+
+Example 3
+TEXT: "Yo, dude, grab a six-pack before the Super Bowl starts."
+DOMAIN: dailydialog
+OUTPUT:
+[
+  {
+    "span": "Yo",
+    "char_start": 1,
+    "char_end": 3,
+    "category": "social_norm_address",
+    "adaptation_necessity": "may_adapt",
+    "salience": 0.45,
+    "local_role": "Signals an informal American greeting/register at the start of the utterance.",
+    "scale_sensitive": false,
+    "figurative": false,
+    "dependencies": ["dude"]
+  },
+  {
+    "span": "dude",
+    "char_start": 5,
+    "char_end": 9,
+    "category": "social_norm_address",
+    "adaptation_necessity": "may_adapt",
+    "salience": 0.5,
+    "local_role": "Marks casual peer address between speakers.",
+    "scale_sensitive": false,
+    "figurative": false,
+    "dependencies": ["Yo"]
+  },
+  {
+    "span": "six-pack",
+    "char_start": 16,
+    "char_end": 24,
+    "category": "food_drink",
+    "adaptation_necessity": "may_adapt",
+    "salience": 0.55,
+    "local_role": "Refers to a culturally specific beverage purchase for the event context.",
+    "scale_sensitive": false,
+    "figurative": false,
+    "dependencies": []
+  },
+  {
+    "span": "Super Bowl",
+    "char_start": 36,
+    "char_end": 46,
+    "category": "pop_culture_sport_media",
+    "adaptation_necessity": "must_adapt",
+    "salience": 0.95,
+    "local_role": "Names the U.S.-specific sporting event that anchors the social plan.",
+    "scale_sensitive": false,
+    "figurative": false,
+    "dependencies": []
+  }
+]
+
+Example 4
+TEXT: Add salt, onion, and water. Stir well for 2 minutes.
+DOMAIN: recipenlg
+OUTPUT:
+[]
+
+IMPORTANT EXTRA RULES:
+- Extract the minimal exact span from the text, not a paraphrase and not surrounding context.
+- Offsets must match the exact substring in the source text.
+- If a name or brand is generic in context and not culturally marked, do not force it into the output.
+- Prefer fewer, high-confidence CSIs over speculative ones.
+- Do NOT mark plain English words as CSIs unless they are culturally anchored in this context.
+- For personal_name_identity, only mark names/titles that carry cultural identity signal in context (not every random first name).
+- For dependencies, include only direct adaptation couplings; keep it empty if no coupling is necessary.
+- If uncertain between two categories, choose the one that governs adaptation behavior (for example, "$20" is unit_currency_scale, not place_institution_brand even if near a store name).
+
+If NO CSIs are found, return an empty array: []

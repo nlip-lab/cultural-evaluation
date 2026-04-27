@@ -1,0 +1,999 @@
+"""
+Adaptation controller: orchestrates all nine model adapters against the
+benchmark JSONL. Each model adapter applies its own chat-template formatting
+to the shared prompt content.
+"""
+
+import argparse
+import gc
+import json
+import os
+import re
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+import torch
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent.parent
+PROC_DIR = PROJECT_ROOT / "03_data" / "processed"
+DEFAULT_OUTPUT_DIR = PROC_DIR / "adapted_data"
+
+PROMPT_VERSION = "CAP-v3.0"
+
+SIMPLE_SYSTEM_TEMPLATE = """\
+You are a cultural adaptation specialist.\
+"""
+
+SIMPLE_USER_TEMPLATE = """\
+{domain_label}: {text}
+
+Adapt this from {source_culture} to {target_culture} context.\
+"""
+
+SYSTEM_PROMPT_TEMPLATE = """\
+You are a cultural adaptation specialist.
+
+Replace every culture-specific item (CSI) in the text with a natural {target_culture} equivalent. The source text is grounded in {source_culture} cultural context. CSIs include: ecology, material culture (food, clothing, objects), social practices, institutions, currency, measurements, and names.
+
+Rules:
+1. Preserve all numeric values, logical dependencies, and causal structure exactly.
+2. Output must be entirely in the same language as the input.
+3. Do not solve, answer, or explain. Output the adapted text only.\
+"""
+
+COT_USER_TEMPLATE = """\
+{domain_label}: {text}
+
+Adapt this text step by step.
+
+STEP 1 IDENTIFY:
+List each culture-specific item (CSI) and its type (ecology / material culture / social practice / institution / currency / measurement / name / other).
+
+STEP 2 MAP:
+For each CSI, state the {target_culture} equivalent replacing the {source_culture} original.
+
+STEP 3 VERIFY:
+Confirm all numeric values and logical dependencies remain valid after substitution.
+
+Finally, write ONLY the final adapted text after the marker below. No explanations, no notes.
+
+ADAPTED TEXT:\
+"""
+
+DIRECT_USER_TEMPLATE = """\
+{domain_label}: {text}
+
+Write the culturally adapted version. Output the adapted text only.\
+"""
+
+ONESHOT_USER_TEMPLATE = """\
+Here is an example of adapting from {source_culture} to {target_culture} context:
+
+{domain_label}: {example_original}
+
+Adapted {domain_label}: {example_adapted}
+
+Now adapt the following text in the same way. Output the adapted text only with no explanations or notes.
+
+{domain_label}: {text}\
+"""
+
+ONESHOT_EXAMPLES = {
+    "educational": {
+        "id": "gsm8k_train_6713",
+        "original": (
+            "Charlotte is making a pie. She can't decide if she will make "
+            "cherry or blueberry. So she decides to make whichever pie is "
+            "cheapest. Both pies will need $2 for flour, $1 for sugar and "
+            "$1.5 for eggs and butter to make the crust. The blueberry pie "
+            "needs 3 pounds of blueberries. The blueberries come in 8 oz "
+            "containers for $2.25. For the cherry pie, she needs 4 pounds "
+            "and they come in a four-pound bag for $14. What is the total "
+            "price to make the cheapest pie?"
+        ),
+        "adapted": (
+            "Ananya is making a pie. She can't decide if she will make "
+            "guava or mango. So she decides to make whichever pie is "
+            "cheapest. Both pies will need ₹160 for flour, ₹80 for sugar and "
+            "₹120 for eggs and butter to make the crust. The guava pie "
+            "needs 1.5 kg of guavas. The guavas come in 250 g packs for "
+            "₹180. For the mango pie, she needs 2 kg and they come in a "
+            "two-kilogram box for ₹1,120. What is the total price to make "
+            "the cheapest pie?"
+        ),
+    },
+    "stories": {
+        "id": "rocstories_train_46523",
+        "original": (
+            "Nashville is Robyn's favorite place to visit. She was raised "
+            "on country music and loved it still. When there she always "
+            "tried to go to the Ryman and 2nd Ave. One time she actually "
+            "got up and sing at one of the watering holes! She eventually "
+            "decided to relocate to Nashville."
+        ),
+        "adapted": (
+            "Jaipur is Priya's favorite place to visit. She was raised on "
+            "Rajasthani folk music and loved it still. When there she "
+            "always tried to go to Hawa Mahal and Johari Bazaar. One time "
+            "she actually got up and sing at one of the chai stalls! She "
+            "eventually decided to relocate to Jaipur."
+        ),
+    },
+    "dialogue": {
+        "id": "dailydialog_train_8500",
+        "original": (
+            "Speaker A: We need to figure out how much money we've spent "
+            "and what we've spent it on .\n"
+            "Speaker B: Why ?\n"
+            "Speaker A: Well , I think we should save more . If we save "
+            "more money we can retire earlier and enjoy our life better .\n"
+            "Speaker B: Really , well , OK . Get the receipts out .\n"
+            "Speaker A: Let's see . We spent $ 700 for our home loan "
+            "payment , $ 300 0n groceries , $ 75 0n utilities , $ 250 n "
+            "gasoline , $ 100 on books , and $ 400 0n entertainment last "
+            "month .\n"
+            "Speaker B: That's $ 1 825 .\n"
+            "Speaker A: We put $ 500 into the savings account , and $ 750 "
+            "into our stock account .\n"
+            "Speaker B: $ 3 075 . Our paychecks is $ 3 300 , combined . "
+            "That means we don't have any receipts for $ 225 .\n"
+            "Speaker A: Right . Stop thinking about it . Where do you "
+            "think we can save more money ?\n"
+            "Speaker B: Well , we could eat in more often . That $ 400 "
+            "for entertainment is mostly going to restaurants .\n"
+            "Speaker A: Yeah , that's a good idea , and you like to cook .\n"
+            "Speaker B: All right ."
+        ),
+        "adapted": (
+            "Speaker A: We need to figure out how much money we've spent "
+            "and what we've spent it on .\n"
+            "Speaker B: Why ?\n"
+            "Speaker A: Well , I think we should save more . If we save "
+            "more money we can retire earlier and enjoy our life better .\n"
+            "Speaker B: Really , well , OK . Get the receipts out .\n"
+            "Speaker A: Let's see . We spent ₹25,000 for our home loan "
+            "EMI , ₹12,000 on groceries , ₹3,000 on utilities , ₹8,000 on "
+            "petrol , ₹4,000 on books , and ₹15,000 on entertainment last "
+            "month .\n"
+            "Speaker B: That's ₹67,000 .\n"
+            "Speaker A: We put ₹20,000 into the savings account , and "
+            "₹30,000 into our mutual fund SIP .\n"
+            "Speaker B: ₹1,17,000 . Our salaries are ₹1,25,000 , combined . "
+            "That means we don't have any receipts for ₹8,000 .\n"
+            "Speaker A: Right . Stop thinking about it . Where do you "
+            "think we can save more money ?\n"
+            "Speaker B: Well , we could eat in more often . That ₹15,000 "
+            "for entertainment is mostly going to restaurants .\n"
+            "Speaker A: Yeah , that's a good idea , and you like to cook .\n"
+            "Speaker B: All right ."
+        ),
+    },
+    "procedural": {
+        "id": "recipenlg_train_2012030",
+        "original": (
+            "Title: Holiday Cheese Tree\n"
+            "Ingredients: 2 pkg. (8 oz. each) PHILADELPHIA Cream Cheese, "
+            "softened, 1 pkg. (8 oz.) KRAFT Shredded Sharp Cheddar Cheese, "
+            "1 Tbsp. chopped red bell pepper Target 1 pkg For $2.99 thru "
+            "02/06, 1 Tbsp. finely chopped onion King Sooper's 1 lb For "
+            "$0.99 thru 02/09, 2 tsp. LEA & PERRINS Worcestershire Sauce, "
+            "1 tsp. lemon juice Safeway 4 ct For $5.00 thru 02/09, Dash "
+            "ground red pepper, Toasted bread or crackers\n"
+            "Directions: 1. Mix cream cheese and cheddar cheese with "
+            "electric mixer on medium speed until well blended. 2. Blend "
+            "in red bell pepper, onion, Worcestershire sauce, lemon juice "
+            "and ground red pepper. 3. Refrigerate several hours or "
+            "overnight. 4. Drop 6 (1/3-cup) measures of mixture into "
+            "triangle shape on serving platter. 5. Drop remaining mixture "
+            "at base of triangle; smooth to form tree. 6. Garnish as "
+            "desired. 7. Serve with toasted breads or crackers."
+        ),
+        "adapted": (
+            "Title: Festive Cheese Tree\n"
+            "Ingredients: 2 pkg. (225 g each) Amul Cream Cheese, softened, "
+            "1 pkg. (225 g) Amul Shredded Cheddar Cheese, 1 Tbsp. chopped "
+            "red bell pepper D-Mart 1 pkg For ₹199 thru 02/06, 1 Tbsp. "
+            "finely chopped onion Reliance Fresh 500 g For ₹49 thru 02/09, "
+            "2 tsp. Weikfield Worcestershire Sauce, 1 tsp. lemon juice "
+            "DMart 4 ct For ₹299 thru 02/09, Dash ground red pepper, "
+            "Toasted bread or mathri\n"
+            "Directions: 1. Mix cream cheese and cheddar cheese with "
+            "electric mixer on medium speed until well blended. 2. Blend "
+            "in red bell pepper, onion, Worcestershire sauce, lemon juice "
+            "and ground red pepper. 3. Refrigerate several hours or "
+            "overnight. 4. Drop 6 (80 ml) measures of mixture into "
+            "triangle shape on serving platter. 5. Drop remaining mixture "
+            "at base of triangle; smooth to form tree. 6. Garnish as "
+            "desired. 7. Serve with toasted breads or mathri."
+        ),
+    },
+}
+
+ONESHOT_EXAMPLE_IDS = {ex["id"] for ex in ONESHOT_EXAMPLES.values()}
+
+DOMAIN_LABELS = {
+    "educational": "Question",
+    "stories": "Story",
+    "dialogue": "Dialogue",
+    "procedural": "Recipe",
+}
+
+DOMAIN_MAX_TOKENS = {
+    "educational": 256,
+    "stories": 256,
+    "dialogue": 512,
+    "procedural": 768,
+}
+
+DATASET_TO_DOMAIN = {
+    "gsm8k": "educational",
+    "rocstories": "stories",
+    "dailydialog": "dialogue",
+    "recipenlg": "procedural",
+}
+
+DOMAIN_TO_DATASET = {v: k for k, v in DATASET_TO_DOMAIN.items()}
+
+COT_EXTRA_TOKENS = 400
+
+ALL_MODELS = ["gpt4o", "llama", "qwen", "aya", "sarvam", "gemma", "llama8b", "gemma2", "mistral"]
+
+def load_env_file(path: Path) -> None:
+    """Load simple KEY=VALUE pairs from a .env file into os.environ."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or "=" not in s:
+            continue
+        key, val = s.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        val = val.strip().strip('"').strip("'")
+        os.environ.setdefault(key, val)
+
+def check_gpu_memory_or_abort(min_free_gb: float) -> None:
+    """Abort early if any visible GPU is below the required free VRAM threshold."""
+    if not torch.cuda.is_available():
+        print("  ⚠ CUDA is not available; cannot enforce GPU memory threshold.", flush=True)
+        return
+
+    n = torch.cuda.device_count()
+    if n == 0:
+        print("  ⚠ No visible GPUs; cannot enforce GPU memory threshold.", flush=True)
+        return
+
+    print(f"  GPU free-memory check (threshold: {min_free_gb:.1f} GB):", flush=True)
+    low = []
+    for i in range(n):
+        free_b, total_b = torch.cuda.mem_get_info(i)
+        free_gb = free_b / 1024**3
+        total_gb = total_b / 1024**3
+        print(f"    cuda:{i}  free={free_gb:.1f} GB / total={total_gb:.1f} GB", flush=True)
+        if free_gb < min_free_gb:
+            low.append((i, free_gb))
+
+    if low:
+        details = ", ".join([f"cuda:{i}={gb:.1f}GB" for i, gb in low])
+        print(
+            f"\n  ERROR: Insufficient free VRAM ({details}). "
+            f"Need at least {min_free_gb:.1f} GB free per visible GPU. Aborting.",
+            flush=True,
+        )
+        sys.exit(1)
+
+def log_gpu_free_memory(prefix: str) -> None:
+    """Print free VRAM for all currently visible GPUs."""
+    if not torch.cuda.is_available():
+        return
+    for i in range(torch.cuda.device_count()):
+        free_gb = torch.cuda.mem_get_info(i)[0] / 1024**3
+        print(f"  [{prefix}] GPU {i} free: {free_gb:.1f} GB", flush=True)
+
+def build_messages(
+    text: str,
+    domain: str,
+    source_culture: str,
+    target_culture: str,
+    prompt_level: str,
+) -> list[dict]:
+    """Return OpenAI-style message list. Model adapters apply their own chat template."""
+    label = DOMAIN_LABELS.get(domain, "Text")
+
+    if prompt_level == "simple":
+        system = SIMPLE_SYSTEM_TEMPLATE
+        user = SIMPLE_USER_TEMPLATE.format(
+            domain_label=label,
+            text=text,
+            source_culture=source_culture,
+            target_culture=target_culture,
+        )
+    elif prompt_level == "oneshot":
+        system = SYSTEM_PROMPT_TEMPLATE.format(
+            source_culture=source_culture,
+            target_culture=target_culture,
+        )
+        example = ONESHOT_EXAMPLES[domain]
+        user = ONESHOT_USER_TEMPLATE.format(
+            domain_label=label,
+            text=text,
+            source_culture=source_culture,
+            target_culture=target_culture,
+            example_original=example["original"],
+            example_adapted=example["adapted"],
+        )
+    else:
+        system = SYSTEM_PROMPT_TEMPLATE.format(
+            source_culture=source_culture,
+            target_culture=target_culture,
+        )
+        user_tmpl = COT_USER_TEMPLATE if prompt_level == "cot" else DIRECT_USER_TEMPLATE
+        user = user_tmpl.format(
+            domain_label=label,
+            text=text,
+            source_culture=source_culture,
+            target_culture=target_culture,
+        )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+def strip_adapted_prefix(text: str, domain_label: str) -> str:
+    """Remove the 'Adapted {domain_label}:' prefix that oneshot models often copy
+    from the example format (e.g. 'Adapted Question: ...' → '...')."""
+    pattern = rf"^Adapted\s+{re.escape(domain_label)}\s*:\s*"
+    return re.sub(pattern, "", text, count=1, flags=re.IGNORECASE).strip()
+
+def parse_cot_output(raw: str) -> tuple[str, str]:
+    """Extract (cot_reasoning, adapted_text) from a CoT response.
+
+    The CoT prompt produces STEP 1-3 reasoning followed by an
+    ``ADAPTED TEXT:`` marker and the final adapted text.
+
+    Handles markdown variants (``**ADAPTED TEXT:**``, ``### ADAPTED TEXT``)
+    and falls back to the last substantial paragraph if no marker is found.
+    """
+    matches = list(re.finditer(
+        r"(?:\*{1,3}|#{1,4}\s*)?ADAPTED\s+TEXT(?:\*{1,3})?\s*:?\s*\n?",
+        raw,
+        re.IGNORECASE,
+    ))
+    m = matches[-1] if matches else None
+    if m:
+        reasoning = raw[: m.start()].strip()
+        adapted = raw[m.end() :].strip()
+        adapted = re.sub(r"^\s*(?:\*{1,3}|#{1,4})\s*", "", adapted)
+        adapted = re.sub(r"\s*\*{1,3}\s*$", "", adapted)
+        adapted = adapted.strip()
+        if adapted:
+            return reasoning, adapted
+
+    paragraphs = [p.strip() for p in raw.split("\n\n") if len(p.strip()) > 20]
+    if paragraphs:
+        return raw.strip(), paragraphs[-1]
+    return raw.strip(), raw.strip()
+
+def get_max_tokens(domain: str, prompt_level: str) -> int:
+    """Resolve generation token budget from domain and prompt level."""
+    base = DOMAIN_MAX_TOKENS.get(domain, 512)
+    return base + COT_EXTRA_TOKENS if prompt_level == "cot" else base
+
+def load_jsonl(path: Path) -> list[dict]:
+    """Load all records from a JSONL file."""
+    rows = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    return rows
+
+def load_checkpoint_ids(path: Path) -> set:
+    """Load already-processed IDs from a checkpoint or final output file."""
+    if not path.exists():
+        return set()
+    ids = set()
+    skipped = 0
+    with path.open("r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, 1):
+            try:
+                data = json.loads(line)
+                if data.get("is_config_header"):
+                    continue
+                if "id" in data:
+                    ids.add(data["id"])
+            except Exception:
+                skipped += 1
+    if skipped:
+        print(
+            f"  ⚠ {path.name}: skipped {skipped} malformed line(s) while loading checkpoint IDs",
+            flush=True,
+        )
+    return ids
+
+def validate_global_unique_ids(rows: list[dict]) -> None:
+    """Abort if the active input rows contain missing or duplicate IDs.
+
+    Resume/skip logic assumes each item ID uniquely identifies one benchmark row.
+    """
+    missing = 0
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+
+    for r in rows:
+        rid = r.get("id")
+        if not rid:
+            missing += 1
+            continue
+        if rid in seen:
+            duplicates.add(rid)
+        else:
+            seen.add(rid)
+
+    if missing or duplicates:
+        dup_list = sorted(duplicates)
+        sample = ", ".join(dup_list[:8])
+        if len(dup_list) > 8:
+            sample += ", ..."
+        print("\n  ERROR: ID integrity check failed for active rows.", flush=True)
+        print(f"    Missing IDs:   {missing}", flush=True)
+        print(f"    Duplicate IDs: {len(duplicates)}", flush=True)
+        if duplicates:
+            print(f"    Sample duplicates: {sample}", flush=True)
+        print(
+            "    IDs must be globally unique across the selected input rows "
+            "for correct skip/resume behavior. Aborting.",
+            flush=True,
+        )
+        sys.exit(1)
+
+def _make_config_header(model_name: str, model_id: str, args) -> dict:
+    """Build the JSON config header for the first line of an output file."""
+    return {
+        "is_config_header": True,
+        "model": model_name,
+        "model_id": model_id,
+        "prompt_level": args.prompt_level,
+        "prompt_version": PROMPT_VERSION,
+        "temperature": args.temperature,
+        "source_culture": args.source_culture,
+        "target_culture": args.target_culture,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+def _write_records(
+    path: Path,
+    records: list[dict],
+    config_header: dict | None = None,
+    overwrite: bool = False,
+) -> None:
+    """Write records to a JSONL file.
+
+    Args:
+        path: Output file path.
+        records: Records to write.
+        config_header: Written as first line when creating a new file
+            (or when overwrite=True).
+        overwrite: If True, overwrite instead of appending.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = "w" if overwrite else "a"
+    write_header = config_header is not None and (overwrite or not path.exists())
+    with path.open(mode, encoding="utf-8") as f:
+        if write_header:
+            f.write(json.dumps(config_header, ensure_ascii=False) + "\n")
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+def load_adapter(model_name: str):
+    """Import and instantiate the correct model adapter."""
+    if model_name == "gpt4o":
+        from model_gpt4o import GPT4oAdapter
+        return GPT4oAdapter()
+    elif model_name == "llama":
+        from model_llama import LlamaAdapter
+        return LlamaAdapter()
+    elif model_name == "llama8b":
+        from model_llama8b import Llama8BAdapter
+        return Llama8BAdapter()
+    elif model_name == "qwen":
+        from model_qwen import QwenAdapter
+        return QwenAdapter()
+    elif model_name == "aya":
+        from model_aya import AyaAdapter
+        return AyaAdapter()
+    elif model_name == "gemma":
+        from model_gemma import GemmaAdapter
+        return GemmaAdapter()
+    elif model_name == "sarvam":
+        from model_sarvam import SarvamAdapter
+        return SarvamAdapter()
+    elif model_name == "gemma2":
+        from model_gemma2 import Gemma2Adapter
+        return Gemma2Adapter()
+    elif model_name == "mistral":
+        from model_mistral import MistralAdapter
+        return MistralAdapter()
+    else:
+        raise ValueError(f"Unknown model: {model_name}")
+
+def _get_domain(row: dict) -> str:
+    """Map a benchmark row's dataset name to its logical domain."""
+    return DATASET_TO_DOMAIN.get(row.get("domain", ""), row.get("domain", ""))
+
+def process_model(
+    model_name: str,
+    rows: list[dict],
+    args,
+    output_dir: Path,
+    checkpoint_freq: int = 50,
+) -> None:
+    """Process all items for one model, writing per-domain output files.
+
+    Production runs write to ``runs/{prompt_level}/{model}_{domain}.jsonl``
+    via checkpoint files that are renamed on completion.
+    Smoke tests write to ``smoke/{model}_{domain}.jsonl`` (overwrite each run).
+    """
+    print(f"\n{'═' * 70}", flush=True)
+    print(f"  MODEL: {model_name.upper()}  ({len(rows):,} items)", flush=True)
+    print(f"{'═' * 70}", flush=True)
+
+    is_smoke = args.smoke_test
+    active_domains = sorted(set(_get_domain(r) for r in rows))
+
+    if is_smoke:
+        final_paths: dict[str, Path] = {}
+        checkpoint_paths: dict[str, Path] = {}
+    else:
+        base_dir = output_dir / "runs" / args.prompt_level
+        final_paths = {d: base_dir / f"{model_name}_{d}.jsonl" for d in active_domains}
+        checkpoint_paths = {
+            d: base_dir / f"checkpoint_{model_name}_{d}.jsonl"
+            for d in active_domains
+        }
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+    done_ids: set = set()
+    skip_domains: set = set()
+
+    if not is_smoke:
+        for d in active_domains:
+            if final_paths[d].exists():
+                skip_domains.add(d)
+                print(f"  [{model_name}] {d}: final file exists — skipping.", flush=True)
+            elif checkpoint_paths[d].exists():
+                ids = load_checkpoint_ids(checkpoint_paths[d])
+                done_ids.update(ids)
+                print(
+                    f"  [{model_name}] {d}: resuming from checkpoint ({len(ids):,} done).",
+                    flush=True,
+                )
+
+    remaining = [
+        r
+        for r in rows
+        if r["id"] not in done_ids and _get_domain(r) not in skip_domains
+    ]
+    print(
+        f"  Already done: {len(done_ids):,}  |  "
+        f"Skipped domains: {skip_domains or 'none'}  |  "
+        f"Remaining: {len(remaining):,}",
+        flush=True,
+    )
+
+    if not remaining:
+        print("  Nothing to do — all items already processed.", flush=True)
+        return
+
+    adapter = load_adapter(model_name)
+    adapter.load()
+    model_id = adapter.model_id
+    print(f"  Adapter loaded: {model_id}", flush=True)
+
+    domain_buffers: dict[str, list[dict]] = {
+        d: [] for d in active_domains if d not in skip_domains
+    }
+
+    domain_groups: dict[str, list[dict]] = {}
+    for r in remaining:
+        d = _get_domain(r)
+        domain_groups.setdefault(d, []).append(r)
+
+    batch_size = getattr(adapter, "BATCH_SIZE", 1)
+    has_batch = hasattr(adapter, "generate_batch") and batch_size > 1
+    print(
+        f"  Batching: {'enabled (batch_size=' + str(batch_size) + ')' if has_batch else 'disabled (sequential)'}",
+        flush=True,
+    )
+
+    t_start = time.time()
+    processed_count = 0
+    total_remaining = len(remaining)
+
+    try:
+        for domain in sorted(domain_groups.keys()):
+            domain_rows = domain_groups[domain]
+            max_tokens = get_max_tokens(domain, args.prompt_level)
+            domain_label = DOMAIN_LABELS.get(domain, "Text")
+
+            print(
+                f"\n  ── Domain: {domain} ({len(domain_rows)} items, "
+                f"max_tokens={max_tokens}, batch_size={batch_size if has_batch else 1}) ──",
+                flush=True,
+            )
+
+            effective_batch = batch_size if has_batch else 1
+
+            for batch_start in range(0, len(domain_rows), effective_batch):
+                batch_rows = domain_rows[batch_start : batch_start + effective_batch]
+                batch_start_time = time.time()
+
+                batch_messages = []
+                batch_texts = []
+                for row in batch_rows:
+                    text = row.get("original_text", "")
+                    batch_texts.append(text)
+                    batch_messages.append(
+                        build_messages(
+                            text=text,
+                            domain=domain,
+                            source_culture=args.source_culture,
+                            target_culture=args.target_culture,
+                            prompt_level=args.prompt_level,
+                        )
+                    )
+
+                if is_smoke:
+                    for i, row in enumerate(batch_rows):
+                        print(
+                            f"  [smoke] id={row.get('id', '?')} "
+                            f"domain={domain} max_new_tokens={max_tokens} -> generating...",
+                            flush=True,
+                        )
+
+                if has_batch and len(batch_messages) > 1:
+                    try:
+                        raw_outputs = adapter.generate_batch(
+                            batch_messages=batch_messages,
+                            temperature=args.temperature,
+                            max_new_tokens=max_tokens,
+                        )
+                        if len(raw_outputs) != len(batch_messages):
+                            raise RuntimeError(
+                                f"Batch output count mismatch: got {len(raw_outputs)} "
+                                f"outputs for {len(batch_messages)} inputs"
+                            )
+                    except Exception as e:
+                        print(
+                            f"  ⚠  Batch generation failed ({e}), "
+                            f"falling back to sequential for this batch...",
+                            flush=True,
+                        )
+                        raw_outputs = []
+                        for msgs in batch_messages:
+                            try:
+                                raw_outputs.append(
+                                    adapter.generate(
+                                        messages=msgs,
+                                        temperature=args.temperature,
+                                        max_new_tokens=max_tokens,
+                                    )
+                                )
+                            except Exception as e2:
+                                print(f"  ⚠  Sequential fallback error: {e2}", flush=True)
+                                raw_outputs.append("")
+                else:
+                    raw_outputs = []
+                    for msgs in batch_messages:
+                        try:
+                            raw_outputs.append(
+                                adapter.generate(
+                                    messages=msgs,
+                                    temperature=args.temperature,
+                                    max_new_tokens=max_tokens,
+                                )
+                            )
+                        except Exception as e:
+                            row_id = batch_rows[len(raw_outputs)].get("id", "?")
+                            print(f"  ⚠  [{row_id}] generation error: {e}", flush=True)
+                            raw_outputs.append("")
+
+                batch_gen_time = round(time.time() - batch_start_time, 3)
+                per_item_time = round(batch_gen_time / max(len(batch_rows), 1), 3)
+
+                for i, (row, raw) in enumerate(zip(batch_rows, raw_outputs)):
+                    processed_count += 1
+                    text = batch_texts[i]
+                    row_id = row.get("id", f"row-{processed_count}")
+
+                    if args.prompt_level == "cot":
+                        cot_reasoning, adapted_text = parse_cot_output(raw)
+                    else:
+                        cot_reasoning = None
+                        adapted_text = raw.strip()
+                        if args.prompt_level == "oneshot":
+                            adapted_text = strip_adapted_prefix(adapted_text, domain_label)
+
+                    out_record = {
+                        "id": row["id"],
+                        "domain": domain,
+                        "source_culture": args.source_culture,
+                        "target_culture": args.target_culture,
+                        "model": model_name,
+                        "model_id": model_id,
+                        "prompt_version": PROMPT_VERSION,
+                        "prompt_level": args.prompt_level,
+                        "temperature": args.temperature,
+                        "max_new_tokens": max_tokens,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "generation_time_s": per_item_time,
+                        "original_text": text,
+                        "culturally_sensitive": row.get("culturally_sensitive"),
+                        "markers_found": row.get("markers_found", []),
+                        "resolution_tier": row.get("resolution_tier"),
+                        "adapted_text": adapted_text,
+                        "cot_reasoning": cot_reasoning,
+                        "output_words": len(raw.split()),
+                        "raw_output": raw,
+                    }
+
+                    domain_buffers[domain].append(out_record)
+
+                    if is_smoke:
+                        print(f"\n  === SMOKE OUTPUT FOR: {row_id} ===")
+                        print(f"  ORIGINAL: {text}")
+                        print(f"  ADAPTED:  {adapted_text}")
+                        if cot_reasoning:
+                            print(f"  REASONING:\n{cot_reasoning}")
+                        print("  ====================================\n")
+
+                elapsed = time.time() - t_start
+                rate = processed_count / max(elapsed, 0.1)
+                eta = (total_remaining - processed_count) / max(rate, 0.01)
+                print(
+                    f"  [{processed_count:>5}/{total_remaining}]  "
+                    f"{rate:.2f} items/s  ETA {eta / 60:.1f}min  "
+                    f"batch={len(batch_rows)} in {batch_gen_time:.1f}s "
+                    f"({per_item_time:.2f}s/item)",
+                    flush=True,
+                )
+
+                if not is_smoke:
+                    header = _make_config_header(model_name, model_id, args)
+                    for d, buf in domain_buffers.items():
+                        if buf:
+                            _write_records(
+                                checkpoint_paths[d],
+                                buf,
+                                config_header=header,
+                            )
+                            buf.clear()
+
+        if is_smoke:
+            total_smoke = sum(len(b) for b in domain_buffers.values())
+            print(f"\n  Smoke test complete: {total_smoke} items printed to terminal (no files written).", flush=True)
+        else:
+            for d in active_domains:
+                if d in skip_domains:
+                    continue
+                ckpt = checkpoint_paths[d]
+                final = final_paths[d]
+                if ckpt.exists():
+                    ckpt.rename(final)
+                    print(
+                        f"  [{model_name}] {d}: checkpoint → {final.name}",
+                        flush=True,
+                    )
+
+    finally:
+        total = time.time() - t_start
+        try:
+            adapter.unload()
+        finally:
+            try:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+            gc.collect()
+
+    print(f"\n  Done: {processed_count:,} items in {total:.1f}s", flush=True)
+    if not is_smoke:
+        for d in sorted(set(active_domains) - skip_domains):
+            p = final_paths.get(d)
+            if p and p.exists():
+                n = sum(
+                    1
+                    for line in p.open()
+                    if line.strip() and not json.loads(line).get("is_config_header")
+                )
+                print(f"    {d:<14} {n:>5} items → {p}", flush=True)
+
+def parse_temperature(val: str) -> float:
+    """Parse and validate generation temperature in [0.0, 1.0]."""
+    t = float(val)
+    if not (0.0 <= t <= 1.0):
+        raise argparse.ArgumentTypeError(f"Temperature must be between 0.0 and 1.0, got {t}")
+    return t
+
+def parse_args():
+    """Parse CLI arguments for forward adaptation runs."""
+    p = argparse.ArgumentParser(
+        description="Cultural Adaptation Benchmark Evaluation Controller"
+    )
+    p.add_argument("--input", type=Path, default=PROC_DIR / "benchmark.jsonl",
+                   help="Combined benchmark .jsonl")
+    p.add_argument("--output_dir", type=Path, default=DEFAULT_OUTPUT_DIR,
+                   help="Root output directory (smoke/ and runs/ created inside)")
+    p.add_argument("--model", type=str, default="all",
+                   choices=ALL_MODELS + ["all"],
+                   help="Model to run (or 'all' for sequential run of all 9 models)")
+    p.add_argument("--prompt_level", type=str, default="instructed",
+                   choices=["simple", "instructed", "oneshot", "cot"],
+                   help="Evaluation ladder tier")
+    p.add_argument("--temperature", type=parse_temperature, default=0,
+                   help="Generation temperature (0.0-1.0, default 0 = deterministic)")
+    p.add_argument("--source_culture", type=str, default="American",
+                   help="Source culture label")
+    p.add_argument("--target_culture", type=str, default="Indian",
+                   help="Target culture label")
+    p.add_argument("--domain", type=str, default="all",
+                   choices=["all", "educational", "stories", "dialogue", "procedural"],
+                   help="Filter to a single domain (default: all)")
+    p.add_argument("--gpus", type=str, default="0,1",
+                   help="Comma-separated physical GPU indices (e.g. '1,2')")
+    p.add_argument("--smoke_test", action="store_true",
+                   help="Run on 2 items per domain only; writes to smoke/ directory")
+    return p.parse_args()
+
+def main():
+    """Entry point for forward adaptation execution."""
+    load_env_file(SCRIPT_DIR / ".env")
+    load_env_file(SCRIPT_DIR.parent / ".env")
+
+    os.environ.setdefault("VLLM_LOGGING_LEVEL", "WARNING")
+    os.environ.setdefault("VLLM_NO_USAGE_STATS", "1")
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+    args = parse_args()
+
+    checkpoint_freq = 50
+    min_free_gb = 20.0
+
+    devices = [d.strip() for d in args.gpus.split(",") if d.strip()]
+    if len(devices) < 2:
+        print("  ⚠ WARNING: Less than 2 GPUs specified. 2 GPUs minimum is recommended.", flush=True)
+
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus.strip()
+
+    check_gpu_memory_or_abort(min_free_gb)
+
+    print(f"\n{'#' * 70}", flush=True)
+    print("  Cultural Adaptation Benchmark — Evaluation", flush=True)
+    print(f"{'#' * 70}", flush=True)
+    print(f"  Input:          {args.input}", flush=True)
+    print(f"  Prompt version: {PROMPT_VERSION}", flush=True)
+    print(f"  Prompt level:   {args.prompt_level}", flush=True)
+    print(f"  Temperature:    {args.temperature}", flush=True)
+    print(f"  Source culture: {args.source_culture}", flush=True)
+    print(f"  Target culture: {args.target_culture}", flush=True)
+    print(f"  Domain filter:  {args.domain}", flush=True)
+    print(f"  Model(s):       {args.model}", flush=True)
+    print(f"  GPUs visible:   {os.environ.get('CUDA_VISIBLE_DEVICES', 'default')}", flush=True)
+    print(f"  Smoke test:     {args.smoke_test}", flush=True)
+    print(f"  Output dir:     {args.output_dir}", flush=True)
+
+    rows = load_jsonl(args.input)
+    print(f"\n  Loaded {len(rows):,} items from {args.input}", flush=True)
+
+    if args.input.resolve() == (PROC_DIR / "benchmark.jsonl").resolve():
+        if len(rows) != 6000:
+            print(
+                f"  ERROR: Expected 6,000 items in benchmark.jsonl, "
+                f"found {len(rows):,}. Aborting.",
+                flush=True,
+            )
+            sys.exit(1)
+        domain_counts: dict[str, int] = {}
+        for r in rows:
+            d = r.get("domain", "?")
+            domain_counts[d] = domain_counts.get(d, 0) + 1
+        expected = {
+            "educational": 1500,
+            "stories": 1500,
+            "dialogue": 1500,
+            "procedural": 1500,
+        }
+        if domain_counts != expected:
+            print(f"  WARNING: Unexpected domain distribution: {domain_counts}", flush=True)
+        else:
+            print("  Benchmark integrity: 6,000 items (1,500 per domain)", flush=True)
+
+    if args.domain != "all":
+        dataset_name = DOMAIN_TO_DATASET.get(args.domain, args.domain)
+        rows = [r for r in rows if r.get("domain") == dataset_name]
+        print(f"  After domain filter ({args.domain} -> {dataset_name}): {len(rows):,}", flush=True)
+
+    if args.prompt_level == "oneshot":
+        before = len(rows)
+        rows = [r for r in rows if r["id"] not in ONESHOT_EXAMPLE_IDS]
+        excluded = before - len(rows)
+        if excluded:
+            print(f"  Oneshot mode: excluded {excluded} exemplar(s) to prevent data leakage.", flush=True)
+
+    if args.smoke_test:
+        benchmark_path = PROC_DIR / "benchmark.jsonl"
+        smoke_source = rows
+        if benchmark_path.exists() and args.input.resolve() != benchmark_path.resolve():
+            smoke_source = load_jsonl(benchmark_path)
+            print(f"  Smoke test: using {benchmark_path.name} for full domain coverage", flush=True)
+        smoke_rows: list[dict] = []
+        counts: dict[str, int] = {}
+        for r in smoke_source:
+            d = r.get("domain", "unknown")
+            if counts.get(d, 0) < 2:
+                smoke_rows.append(r)
+                counts[d] = counts.get(d, 0) + 1
+        rows = smoke_rows
+        print(f"  Smoke test: 2 items × {len(counts)} domains = {len(rows)} items total", flush=True)
+
+    validate_global_unique_ids(rows)
+
+    if not rows:
+        print("  No items to process. Exiting.", flush=True)
+        sys.exit(0)
+
+    models_to_run = ALL_MODELS if args.model == "all" else [args.model]
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    failed_models = []
+
+    for model_name in models_to_run:
+        try:
+            process_model(
+                model_name=model_name,
+                rows=rows,
+                args=args,
+                output_dir=args.output_dir,
+                checkpoint_freq=checkpoint_freq,
+            )
+        except (Exception, SystemExit) as e:
+            failed_models.append((model_name, str(e)))
+            print(f"\n  ⚠ Model {model_name} failed: {e}", flush=True)
+            print("  Continuing with remaining models...", flush=True)
+            continue
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        log_gpu_free_memory("cleanup")
+
+    print(f"\n{'#' * 70}", flush=True)
+    print("  All runs complete.", flush=True)
+
+    if args.smoke_test:
+        print("  Smoke test: all output printed to terminal. No files were written.", flush=True)
+    else:
+        run_dir = args.output_dir / "runs" / args.prompt_level
+        if run_dir.exists():
+            for model_name in models_to_run:
+                for domain in sorted(DATASET_TO_DOMAIN.values()):
+                    fpath = run_dir / f"{model_name}_{domain}.jsonl"
+                    if fpath.exists():
+                        n = sum(
+                            1
+                            for line in fpath.open()
+                            if line.strip() and not json.loads(line).get("is_config_header")
+                        )
+                        print(f"  {model_name:<12} {domain:<14} {n:>6,} items → {fpath}", flush=True)
+
+    if failed_models:
+        print("\n  Failed models:", flush=True)
+        for name, err in failed_models:
+            print(f"    - {name}: {err}", flush=True)
+
+if __name__ == "__main__":
+    main()
+

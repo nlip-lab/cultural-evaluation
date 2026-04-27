@@ -1,0 +1,55 @@
+You are evaluating whether an adapted text preserves the meaning, logic, and communicative purpose of the original.
+
+SOURCE TEXT (American context): {source_text}
+ADAPTED TEXT (Indian context): {adapted_text}
+DOMAIN: {domain}
+
+Evaluate on these 5 dimensions. Score each 0.0-1.0.
+
+{
+  "core_intent": {
+    "score": <0.0-1.0>,
+    "rationale": "<Does the adapted text still serve the same primary purpose as the source?>"
+  },
+  "causal_temporal_logic": {
+    "score": <0.0-1.0>,
+    "rationale": "<Is the sequence of events, cause-effect, or reasoning chain intact?>"
+  },
+  "unwarranted_elaboration": {
+    "score": <0.0-1.0>,
+    "rationale": "<Was content added that was not in the source? 1.0 = no extra content added.>"
+  },
+  "pragmatic_register": {
+    "score": <0.0-1.0>,
+    "rationale": "<Is the tone, formality, and communicative style preserved?>"
+  },
+  "character_role_preservation": {
+    "score": <0.0-1.0>,
+    "rationale": "<Do characters maintain their roles, relationships, and agency? Score 1.0 if no characters.>"
+  },
+  "overall_c3_score": <0.0-1.0, weighted mean: core_intent x 0.35 + causal x 0.25 + elaboration x 0.15 + register x 0.15 + character x 0.10>,
+  "c3_subtype": "<most prominent failure or 'none'>",
+  "c3_severity": "<none | surface | substantive | critical>"
+}
+
+DOMAIN-SPECIFIC GUIDANCE:
+- gsm8k: "core_intent" MUST check that the adapted text is still a solvable math problem with identical logical structure. If the problem is destroyed or unsolvable, core_intent = 0.0. Verify that any currency/unit conversions still yield internally consistent arithmetic.
+- rocstories: Check that the 5-sentence narrative structure survives. Events must follow logically. Character motivations must remain intact.
+- dailydialog: Check that each conversational turn maintains its communicative function (a question stays a question, a refusal stays a refusal, a complaint stays a complaint). Pragmatic force must be preserved.
+- recipenlg: Check that ingredients and steps are internally consistent. If an ingredient is changed (e.g., blueberries -> mangoes), every step referencing it must also update accordingly.
+
+C3 SUBTYPE OPTIONS:
+- "none"
+- "C3.1_core_intent_shift": the adapted text serves a different purpose
+- "C3.2_causal_temporal_disruption": events are reordered, steps broken, or logic chains severed
+- "C3.3_unwarranted_elaboration": substantial content added that was not in source
+- "C3.4_pragmatic_force_drift": tone or register shifts significantly
+- "C3.5_character_role_shift": character roles, relationships, or agency altered
+
+SEVERITY GUIDE:
+- none: score >= 0.8
+- surface: score 0.5-0.79
+- substantive: score 0.3-0.49
+- critical: score < 0.3
+
+Return ONLY valid JSON, no other text.

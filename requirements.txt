@@ -1,0 +1,30 @@
+# ── Core ML / Deep Learning ─────────────────────────────────────────────────
+torch>=2.1.0
+transformers>=4.40.0
+datasets>=2.18.0
+sentence-transformers>=2.7.0
+
+# ── LLM Inference (GPU server) ──────────────────────────────────────────────
+# vLLM requires a CUDA-capable GPU; install separately if running CPU-only.
+vllm>=0.4.0
+
+# ── NLP utilities ────────────────────────────────────────────────────────────
+spacy>=3.7.0
+# After install, download the transformer-based NER model:
+#   python -m spacy download en_core_web_trf
+nltk>=3.8.0
+rouge-score>=0.1.2
+sacrebleu>=2.3.0
+bert-score>=0.3.13
+
+# ── Scientific computing ─────────────────────────────────────────────────────
+numpy>=1.26.0
+scikit-learn>=1.4.0
+
+# ── API clients ──────────────────────────────────────────────────────────────
+openai>=1.30.0
+google-auth>=2.29.0
+google-auth-httplib2>=0.2.0
+
+# ── System utilities ─────────────────────────────────────────────────────────
+psutil>=5.9.0

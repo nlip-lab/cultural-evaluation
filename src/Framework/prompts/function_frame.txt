@@ -1,0 +1,157 @@
+You are a cultural adaptation specialist. For each Culture-Specific Item (CSI) extracted from an American text, define its FUNCTIONAL ROLE in context.
+
+SOURCE TEXT: {source_text}
+DOMAIN: {domain}
+
+CSIs TO ANALYZE:
+{csi_list_json}
+
+For each CSI, return a JSON object with these fields:
+{
+  "span": "<the CSI span>",
+  "denotation": "<what it literally is, 1 phrase>",
+  "cultural_role": "<what kind of American cultural anchor it serves, 1 phrase>",
+  "contextual_function": "<what JOB it does in THIS specific text, 1 sentence>",
+  "required_affordances": ["<property that must survive adaptation>", ...],
+  "numeric_constraints": "<conversion rule if scale_sensitive, else null>",
+  "register_constraints": "<formality/tone requirement if relevant, else null>"
+}
+
+RULES:
+- "contextual_function" is the most important field. It must describe WHAT THE CSI DOES HERE, not what it is in general.
+  GOOD: "Serves as the everyday grocery store where the protagonist buys ingredients, anchoring the scene in routine domestic life"
+  BAD: "Safeway is an American supermarket chain"
+- "required_affordances" should list 2-5 properties that ANY valid replacement must have.
+  Example for "Safeway": ["grocery store", "familiar to general public", "walkable/drivable for routine shopping"]
+- "numeric_constraints" only for units, currency, quantities. Be specific:
+  Example: "1 pound = 0.4536 kg; must convert value, not just label"
+
+FEW-SHOT EXAMPLES:
+
+Example 1
+SOURCE TEXT: Trevor spent $20 at Walmart to buy pumpkin pie for Thanksgiving dinner.
+DOMAIN: rocstories
+CSIs TO ANALYZE:
+[
+  {
+    "span": "$20",
+    "category": "unit_currency_scale",
+    "scale_sensitive": true,
+    "figurative": false,
+    "local_role": "Specifies the shopping amount and may require currency conversion for a local reader."
+  },
+  {
+    "span": "Walmart",
+    "category": "place_institution_brand",
+    "scale_sensitive": false,
+    "figurative": false,
+    "local_role": "Anchors the purchase in a familiar big-box American retail setting."
+  }
+]
+OUTPUT:
+[
+  {
+    "span": "$20",
+    "denotation": "a cash amount",
+    "cultural_role": "U.S. currency marker",
+    "contextual_function": "Sets the budget for the shopping action, so the adapted version must preserve roughly the same purchasing-scale signal.",
+    "required_affordances": ["currency amount", "plausible grocery-shopping budget", "easy for a general reader to interpret"],
+    "numeric_constraints": "Convert the dollar amount into a locally meaningful rupee amount; preserve approximate spending scale rather than copying the symbol.",
+    "register_constraints": null
+  },
+  {
+    "span": "Walmart",
+    "denotation": "a retail store chain",
+    "cultural_role": "mass-market American shopping anchor",
+    "contextual_function": "Supplies the ordinary shopping venue for the errand, so any replacement should feel like a common, accessible place to buy household groceries.",
+    "required_affordances": ["grocery-capable store", "widely recognizable", "everyday middle-class shopping context"],
+    "numeric_constraints": null,
+    "register_constraints": null
+  }
+]
+
+Example 2
+SOURCE TEXT: Coach said the team needed a Hail Mary in the final minute.
+DOMAIN: dailydialog
+CSIs TO ANALYZE:
+[
+  {
+    "span": "Hail Mary",
+    "category": "idiom_figurative",
+    "scale_sensitive": false,
+    "figurative": true,
+    "local_role": "Conveys that the team needs a desperate last-chance play rather than a literal religious reference."
+  }
+]
+OUTPUT:
+[
+  {
+    "span": "Hail Mary",
+    "denotation": "a desperate last attempt",
+    "cultural_role": "American football idiom",
+    "contextual_function": "Signals extreme urgency and low odds of success in the sports metaphor, so the adaptation must preserve the last-ditch tone rather than the literal wording.",
+    "required_affordances": ["desperation", "last-chance attempt", "sports-compatible phrasing"],
+    "numeric_constraints": null,
+    "register_constraints": "Keep the tone colloquial and motivational."
+  }
+]
+
+Example 3
+SOURCE TEXT: "Yo, dude, grab a six-pack before the Super Bowl starts."
+DOMAIN: dailydialog
+CSIs TO ANALYZE:
+[
+  {
+    "span": "Yo",
+    "category": "social_norm_address",
+    "scale_sensitive": false,
+    "figurative": false,
+    "local_role": "Signals an informal American greeting/register at the start of the utterance."
+  },
+  {
+    "span": "Super Bowl",
+    "category": "pop_culture_sport_media",
+    "scale_sensitive": false,
+    "figurative": false,
+    "local_role": "Names the U.S.-specific sporting event that anchors the social plan."
+  }
+]
+OUTPUT:
+[
+  {
+    "span": "Yo",
+    "denotation": "an informal greeting",
+    "cultural_role": "casual American address marker",
+    "contextual_function": "Sets a relaxed peer-to-peer conversational tone, so replacement should preserve colloquial intimacy rather than formal politeness.",
+    "required_affordances": ["informal greeting", "peer register", "spoken-dialogue naturalness"],
+    "numeric_constraints": null,
+    "register_constraints": "Keep it casual and conversational."
+  },
+  {
+    "span": "Super Bowl",
+    "denotation": "a major U.S. championship game",
+    "cultural_role": "national sports-event anchor",
+    "contextual_function": "Acts as the time anchor and motivation for the plan, so adaptation needs an event with similar social-viewing salience and scheduling function.",
+    "required_affordances": ["widely followed event", "watch-party context", "fixed start-time relevance"],
+    "numeric_constraints": null,
+    "register_constraints": null
+  }
+]
+
+Example 4
+SOURCE TEXT: Add salt, onion, and water. Stir well for 2 minutes.
+DOMAIN: recipenlg
+CSIs TO ANALYZE:
+[]
+OUTPUT:
+[]
+
+IMPORTANT EXTRA RULES:
+- Keep one output object per input CSI and preserve the same order as the input list.
+- Use concise, operational language that will help later scoring and substitution checks.
+- `required_affordances` should be concrete properties a replacement must satisfy, not vague values like "sounds Indian".
+- If the input CSI list is empty, return [] exactly.
+- Do not invent new spans. Every output `span` must be copied exactly from the input item.
+- If `scale_sensitive` is false, `numeric_constraints` should usually be null.
+
+Return ONLY a JSON array of objects, one per CSI, in the same order as input.
