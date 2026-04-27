@@ -144,62 +144,15 @@ Total: 8 models × 4 strategies × 1,500 items × 4 domains = **192,000** (191,9
 
 Seven sequential phases, each operationalizing one or more IAET categories.
 
-```
-build_index.py              ── join adaptations to benchmark source records
-build_sample_ids_16k.py     ── stratified 16K sample for judge-intensive phases
-                                        │
-     ┌──────────────────────────────────▼──────────────────────────────────────┐
-     │  Phase 1 · CSI Extraction                              (C1–C5 setup)   │
-     │  run_extraction.py   → CSI spans + salience + necessity               │
-     │  run_function_frames.py → function frames (denotation + role)         │
-     │  run_wikidata_grounding.py → Wikidata QID injection for 28% of CSIs   │
-     └──────────────────────────────────┬──────────────────────────────────────┘
-                                        │
-     ┌──────────────────────────────────▼──────────────────────────────────────┐
-     │  Phase 2 · Output Integrity Filtering                        (C5.1)    │
-     │  run_hygiene.py / run_phase2.py                                        │
-     │  Labels: pass · fail_soft · fail_hard                                  │
-     │  Hard failures receive C5 label and exit the pipeline                  │
-     └──────────────────────────────────┬──────────────────────────────────────┘
-                                        │
-     ┌──────────────────────────────────▼──────────────────────────────────────┐
-     │  Phase 3 · Adaptation Audit                                  (C1)      │
-     │  run_audit.py   → per-CSI labels: retained / localized / globalized /  │
-     │                    transformed / omitted / distorted                   │
-     │  compute_csi_metrics.py → RF, TCT, SAT                                │
-     └──────────────────────────────────┬──────────────────────────────────────┘
-                                        │
-     ┌──────────────────────────────────▼──────────────────────────────────────┐
-     │  Phase 4 · Substitution Validity                             (C2)      │
-     │  run_c2_judge.py → affordance · scale · dependency · identity ·        │
-     │                    figurative; scale_checker overrides arithmetic       │
-     └──────────────────────────────────┬──────────────────────────────────────┘
-                                        │
-     ┌──────────────────────────────────▼──────────────────────────────────────┐
-     │  Phase 5 · Adapted Function Frames                         (C3 setup)  │
-     │  build_dedup_pairs.py → cluster near-duplicate adapted spans           │
-     │  run_adapted_frames.py → generate adapted-side function frames         │
-     │  build_paired_frames.py → project back to evaluation items             │
-     └──────────────────────────────────┬──────────────────────────────────────┘
-                                        │
-     ┌──────────────────────────────────▼──────────────────────────────────────┐
-     │  Phase 6 · Semantic Function Preservation                    (C3)      │
-     │  compute_fps.py → FPS (LLM judge, stratified 16K)                     │
-     │  compute_fes.py → FES (embedding cosine, contextual + holistic)       │
-     │  compute_fbs.py → FBS (BERTScore-F1)                                  │
-     │  compute_bleu_rouge.py → BLEU / ROUGE-L (lexical baselines)           │
-     └──────────────────────────────────┬──────────────────────────────────────┘
-                                        │
-     ┌──────────────────────────────────▼──────────────────────────────────────┐
-     │  Phase 7 · Round-Trip Consistency                          (C4, C5.2)  │
-     │  run_csi_extraction.py → CSI extraction on reverse outputs            │
-     │  run_9a_surface_metrics.py → BLEU / ROUGE-L / BERTScore              │
-     │  run_9c_csi_alignment.py → Rec / Sub / Leak / Miss rates             │
-     │  run_9d_llm_judge.py → meaning · structure · detail · overall (0–10)  │
-     └──────────────────────────────────┬──────────────────────────────────────┘
-                                        │
-                             build_unified_scores.py
-```
+| Phase | Scripts | IAET |
+|---|---|---|
+| **1 · CSI Extraction** | `run_extraction.py`, `run_function_frames.py`, `run_wikidata_grounding.py` | C1–C5 setup |
+| **2 · Output Integrity** | `run_hygiene.py`, `run_phase2.py` | C5.1 |
+| **3 · Adaptation Audit** | `run_audit.py`, `compute_csi_metrics.py` | C1 |
+| **4 · Substitution Validity** | `run_c2_judge.py`, `scale_checker.py` | C2 |
+| **5 · Adapted Frames** | `build_dedup_pairs.py`, `run_adapted_frames.py`, `build_paired_frames.py` | C3 setup |
+| **6 · Function Preservation** | `compute_fps.py`, `compute_fes.py`, `compute_fbs.py`, `compute_bleu_rouge.py` | C3 |
+| **7 · Round-Trip** | `run_csi_extraction.py`, `run_9a_surface_metrics.py`, `run_9c_csi_alignment.py`, `run_9d_llm_judge.py` | C4, C5.2 |
 
 ### Metrics at a Glance
 
