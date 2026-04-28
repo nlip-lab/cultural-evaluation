@@ -25,7 +25,7 @@ preferred-citation:
   authors:
     - name: "Anonymous Authors"
   conference:
-    name: "Annual Meeting of the Association for Computational Linguistics"
-    abbreviation: ACL
-  year: 2025
+    name: "Conference on Empirical Methods in Natural Language Processing"
+    abbreviation: EMNLP
+  year: 2026
   notes: "Anonymous submission"

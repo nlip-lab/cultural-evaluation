@@ -1,6 +1,6 @@
 # Lost in Localization: Benchmarking Intralingual Cultural Adaptation in Large Language Models
 
-> *Anonymous submission — ACL 2025*
+> *Anonymous submission — EMNLP 2026*
 
 ---
 
@@ -315,9 +315,9 @@ Both APIs are called asynchronously with retry logic and configurable concurrenc
   title     = {Lost in Localization: Benchmarking Intralingual Cultural Adaptation
                in Large Language Models},
   author    = {Anonymous Authors},
-  booktitle = {Proceedings of the 63rd Annual Meeting of the Association for
-               Computational Linguistics (ACL 2025)},
-  year      = {2025},
+  booktitle = {Proceedings of the 2026 Conference on Empirical Methods in
+               Natural Language Processing (EMNLP 2026)},
+  year      = {2026},
   note      = {Anonymous submission}
 }
 ```
