@@ -1,112 +1,93 @@
 # Lost in Localization: Benchmarking Intralingual Cultural Adaptation in Large Language Models
 
 > *Anonymous submission — ACL 2025*
-> Code: [https://anonymous.4open.science/r/cultural-evaluation-framework/](https://anonymous.4open.science/r/cultural-evaluation-framework/)
 
 ---
 
-## What This Paper Is About
+## Overview
 
-Cultural adaptation requires more than lexical substitution. A model must decide *what* to change, *whether* each replacement is locally valid, and *whether* it preserves the original's **functional role** — what job the cultural item is doing in context, not merely what it denotes. We call this **function-preserving cultural transfer** and argue it is the right unit of evaluation.
+This repository contains the full pipeline for **CulturalAdapt-6K**, a benchmark for evaluating *function-preserving intralingual cultural adaptation* (American English → Indian English) in large language models.
 
-Existing benchmarks conflate these three decisions into a single quality judgment. We disentangle them with three contributions:
+The project has three components:
 
-| Contribution | Description |
+| Component | Description |
 |---|---|
-| **CulturalAdapt-6K** | 6,000 American-source texts across four discourse domains, with CSI-level annotations |
-| **IAET** | Intercultural Adaptation Error Taxonomy — 21 subtypes across 5 stage-aligned categories |
-| **Evaluation pipeline** | Seven-phase, CSI-level pipeline grounded in function frames and operationalizing each IAET stage |
-
-We evaluate **191,968 adaptations** from **eight instruction-tuned models** under **four prompting conditions** on the American→Indian axis.
-
-**Central finding:** models that substitute the most are not the ones that substitute best. High localization inflates failure exposure; conservative retention inflates validity scores; yet both poles converge to the same functional quality. Current LLMs can dress text in a target culture's vocabulary but cannot reliably preserve the contextual roles that vocabulary is meant to serve.
+| **CulturalAdapt-6K** | 6,000 American-source texts across four discourse domains with CSI-level annotations |
+| **IAET** | Intercultural Adaptation Error Taxonomy — 21 subtypes across 5 stage-aligned error categories |
+| **Evaluation pipeline** | Seven-phase, CSI-level evaluation framework operationalizing each IAET category |
 
 ---
 
-## The Intercultural Adaptation Error Taxonomy (IAET)
+## Repository Structure
 
-Each error category maps to one pipeline stage and follows a **root-cause** principle: when a failure cascades across stages, it is assigned the earliest applicable label.
+```
+.
+├── README.md
+├── REPRODUCIBILITY.md           ← step-by-step environment and run guide
+├── requirements.txt             ← pip dependencies
+├── environment.yml              ← conda environment (Python 3.10, CUDA 11.8)
+├── .env.example                 ← API key template
+└── src/
+    ├── Dataset/                 ← benchmark construction (5 stages)
+    │   ├── 01_download.py       ← download raw source corpora
+    │   ├── 02_sieve_recipes.py  ← filter RecipeNLG (2.2M → 50K)
+    │   ├── 02_sieve_stories.py  ← filter ROCStories (98K → 8,960)
+    │   ├── 03_process.py        ← 4-tier CSI detection (GPU required)
+    │   ├── 04_diversity_sample.py ← KMeans diversity sampling → 6,000 items
+    │   ├── 05_verify.py         ← benchmark integrity report
+    │   └── run_pipeline.sh      ← shell wrapper for step 3
+    ├── Adaptations/             ← forward and reverse generation
+    │   ├── adapt.py             ← main adaptation driver (8 models × 4 strategies)
+    │   ├── reverse_adapt.py     ← Indian → American reverse pass
+    │   ├── model_*.py           ← one adapter per model (vLLM / OpenAI)
+    │   ├── run_adapt.sh         ← forward adaptation shell wrapper
+    │   └── run_reverse.sh       ← reverse adaptation shell wrapper
+    └── Framework/               ← seven-phase evaluation pipeline
+        ├── build_index.py
+        ├── build_sample_ids_16k.py
+        ├── build_unified_scores.py
+        ├── prompts/             ← prompt templates (.txt)
+        ├── 01_CSI_Extraction/   ← extract and enrich CSI spans
+        ├── 02_Hygiene/          ← output integrity checks
+        ├── 03_Audit/            ← CSI strategy audit + RF/TCT/SAT metrics
+        ├── 04_Validity/         ← substitution validity (C2 score)
+        ├── 05_Frames/           ← adapted function-frame construction
+        ├── 06_Analysis/         ← FPS, FES, FBS, BLEU/ROUGE
+        └── 07_Reverse/          ← round-trip consistency analysis
+```
 
-| Category | Subtype | Severity |
+Each `src/` subdirectory has its own `README.md` with inputs, outputs, and usage.
+
+---
+
+## Benchmark: CulturalAdapt-6K
+
+Four discourse domains, 1,500 items each:
+
+| Domain | Source dataset | Raw size |
+|---|---|---|
+| Educational / math | GSM8K | 8,792 |
+| Narrative stories | ROCStories | 98,161 |
+| Conversational dialogue | DailyDialog | 13,118 |
+| Procedural recipes | RecipeNLG | 2,231,142 |
+
+Items are annotated with **Culturally Sensitive Items (CSIs)** across 8 categories: `food_drink`, `place_institution_brand`, `unit_currency_scale`, `holiday_event_ritual`, `personal_name_identity`, `social_norm_address`, `pop_culture_sport_media`, `idiom_figurative`.
+
+Each CSI carries: category, adaptation necessity (`must_adapt` / `may_adapt` / `should_retain`), salience (0–1), and functional-role fields.
+
+---
+
+## Error Taxonomy (IAET)
+
+| Category | Subtypes | Severity |
 |---|---|:---:|
-| **C1 Scope** | C1.1 Residual Source Retention | ●● |
-| | C1.2 Cultural Saturation | ●● |
-| | C1.3 Over-Globalization | ● |
-| | C1.4 Adaptation Collapse | ●●● |
-| **C2 Substitution Validity** | C2.1 Affordance Violation | ●●● |
-| | C2.2 Scale Transfer Error | ●●● |
-| | C2.3 Dependency Propagation Failure | ●● |
-| | C2.4 Identity-Marker Mismatch | ●● |
-| | C2.5 Figurative Equivalence Failure | ● |
-| **C3 Function Preservation** | C3.1 Core Intent Shift | ●●● |
-| | C3.2 Temporal Logic Disruption | ●●● |
-| | C3.3 Scope Distortion | ●● |
-| | C3.4 Pragmatic Force Drift | ●● |
-| **C4 Target-Culture Plausibility** | C4.1 Internal Cultural Incoherence | ●● |
-| | C4.2 Norm Violation | ●● |
-| | C4.3 Stereotypical Portrayal | ●● |
-| | C4.4 Contextual Implausibility | ● |
-| | C4.5 Perspective Inauthenticity | ● |
-| **C5 Output Integrity** | C5.1 Degenerate Output | ●●● |
-| | C5.2 Hallucinated Insertion | ●● |
-| | C5.3 Foreignized Diction | ● |
+| **C1 Scope** | C1.1 Residual Source Retention · C1.2 Cultural Saturation · C1.3 Over-Globalization · C1.4 Adaptation Collapse | ●● – ●●● |
+| **C2 Substitution Validity** | C2.1 Affordance Violation · C2.2 Scale Transfer Error · C2.3 Dependency Propagation Failure · C2.4 Identity-Marker Mismatch · C2.5 Figurative Equivalence Failure | ●● – ●●● |
+| **C3 Function Preservation** | C3.1 Core Intent Shift · C3.2 Temporal Logic Disruption · C3.3 Scope Distortion · C3.4 Pragmatic Force Drift | ●● – ●●● |
+| **C4 Target-Culture Plausibility** | C4.1 Internal Cultural Incoherence · C4.2 Norm Violation · C4.3 Stereotypical Portrayal · C4.4 Contextual Implausibility · C4.5 Perspective Inauthenticity | ● – ●● |
+| **C5 Output Integrity** | C5.1 Degenerate Output · C5.2 Hallucinated Insertion · C5.3 Foreignized Diction | ● – ●●● |
 
 *Severity: ●●● Critical · ●● Substantive · ● Surface*
-
-**Example.** Source: *"Sarah bought 3 pounds of ground beef at Safeway for $4.99/lb. She used half to make cheeseburgers for the Fourth of July barbecue."*
-
-| Code | Adapted excerpt | Diagnosis |
-|---|---|---|
-| **C1.1** | *"Priya bought 3 **pounds** at **Safeway** for **$4.99** … **Fourth of July**."* | Name swapped; unit, store, currency, and holiday remain American. |
-| **C2.2** | *"… mutton at **Rs. 4.99/kg** for **Independence Day**."* | Labels localized, values unchanged: Rs. 4.99/kg is implausible; arithmetic breaks. |
-| **C5.3** | *"… **spiced meat patties** for the **Republic Day barbecue**."* | Correct referents, unnatural register: no Indian speaker says "Republic Day barbecue." |
-
----
-
-## CulturalAdapt-6K
-
-A benchmark of **6,000 English texts** drawn from four American-grounded datasets, curated for intralingual (English→English) American→Indian adaptation.
-
-### Source Datasets
-
-| Domain | Dataset | Raw size | Candidates | Final |
-|---|---|---|---|---|
-| Educational / math | GSM8K | 8,792 | 8,792 | 1,500 |
-| Narrative stories | ROCStories | 98,161 | 8,960 | 1,500 |
-| Conversational dialogue | DailyDialog | 13,118 | 13,118 | 1,500 |
-| Procedural recipes | RecipeNLG | 2,231,142 | 50,000 | 1,500 |
-
-### Construction Pipeline
-
-```
-01_download.py       ─── download raw corpora
-02_sieve_*.py        ─── structural filtering (RecipeNLG, ROCStories only)
-03_process.py        ─── 4-tier CSI detection  ← GPU required
-                          Tier 0: compiled regex (instant YES)
-                          Tier 1: Qwen2.5-7B + spaCy NER
-                          Tier 2: conflict / confidence gate
-                          Tier 3: LLM reconsideration with NER evidence
-04_diversity_sample.py── KMeans (K=1500/domain) + weighted centroid scoring
-05_verify.py         ─── benchmark integrity report
-```
-
-Manual validation on 500 items (two annotators): **κ = 0.86**, 98.4% agreement with pipeline.
-
-### CSI Distribution (33,549 items across 6,000 texts)
-
-| Category | Count | Must% | May% | Retain% | Avg. Salience |
-|---|---:|---:|---:|---:|---:|
-| Unit / currency | 10,174 | **69.7** | 6.9 | 23.4 | 0.557 |
-| Food & drink | 9,788 | 9.1 | 56.4 | 34.5 | 0.534 |
-| Place / brand | 6,647 | 11.7 | 47.6 | 40.6 | 0.475 |
-| Personal name | 2,433 | 4.7 | 8.5 | **86.8** | 0.290 |
-| Pop culture | 1,544 | 26.9 | 29.0 | 44.1 | 0.540 |
-| Holiday / ritual | 1,204 | 47.1 | 19.6 | 33.3 | **0.636** |
-| Social norm | 1,125 | 13.2 | 59.2 | 27.6 | 0.448 |
-| Idiom / figurative | **634** | 14.0 | **70.0** | 15.9 | 0.532 |
-| **Total** | **33,549** | 30.1 | 33.9 | 36.0 | 0.513 |
-
-Only 30.1% of CSIs are mandatory adaptation targets. Uniform conversion of all American references would trigger saturation (C1.2/SAT) penalties on the majority of edits.
 
 ---
 
@@ -114,18 +95,18 @@ Only 30.1% of CSIs are mandatory adaptation targets. Uniform conversion of all A
 
 ### Models (8 total)
 
-| Tier | Model | Params | Origin |
+| Tier | Model | Params | Backend |
 |---|---|---|---|
-| High | Llama-3.3-70B-Instruct (AWQ) | 70B | Meta |
-| High | Qwen2.5-72B-Instruct (AWQ) | 72B | Alibaba |
-| Mid | Aya-Expanse-32B | 32B | Cohere |
-| Mid | Gemma-3-27B-it | 27B | Google DeepMind |
-| Mid | Sarvam-30B | 30B MoE | Sarvam AI (India) |
-| Low | Llama-3.1-8B-Instruct | 8B | Meta |
-| Low | Gemma-2-9B-it | 9B | Google |
-| Low | Mistral-7B-Instruct-v0.3 | 7B | Mistral AI |
+| High | Llama-3.3-70B-Instruct (AWQ) | 70B | vLLM, TP=2 |
+| High | Qwen2.5-72B-Instruct (AWQ) | 72B | vLLM, TP=2 |
+| Mid | Aya-Expanse-32B | 32B | vLLM, TP=2 |
+| Mid | Gemma-3-27B-it | 27B | vLLM, TP=2 |
+| Mid | Sarvam-30B | 30B MoE | vLLM, TP=2 |
+| Low | Llama-3.1-8B-Instruct | 8B | vLLM, TP=1 |
+| Low | Gemma-2-9B-it | 9B | vLLM, TP=1 |
+| Low | Mistral-7B-Instruct-v0.3 | 7B | vLLM, TP=1 |
 
-Sarvam-30B is an India-origin model, providing a culturally proximate training prior for the target context.
+GPT-4o is also supported via the OpenAI API (`model_gpt4o.py`).
 
 ### Prompt Strategies (4 total)
 
@@ -136,155 +117,21 @@ Sarvam-30B is an India-origin model, providing a culturally proximate training p
 | `oneshot` | Instructed + one hand-crafted example per domain |
 | `cot` | Chain-of-thought: IDENTIFY → MAP → VERIFY |
 
-Total: 8 models × 4 strategies × 1,500 items × 4 domains = **192,000** (191,968 after exemplar leakage control in `oneshot`).
-
 ---
 
 ## Evaluation Pipeline
 
-Seven sequential phases, each operationalizing one or more IAET categories.
+Seven sequential phases, each operationalizing one or more IAET categories:
 
-| Phase | Scripts | IAET |
-|---|---|---|
-| **1 · CSI Extraction** | `run_extraction.py`, `run_function_frames.py`, `run_wikidata_grounding.py` | C1–C5 setup |
-| **2 · Output Integrity** | `run_hygiene.py`, `run_phase2.py` | C5.1 |
-| **3 · Adaptation Audit** | `run_audit.py`, `compute_csi_metrics.py` | C1 |
-| **4 · Substitution Validity** | `run_c2_judge.py`, `scale_checker.py` | C2 |
-| **5 · Adapted Frames** | `build_dedup_pairs.py`, `run_adapted_frames.py`, `build_paired_frames.py` | C3 setup |
-| **6 · Function Preservation** | `compute_fps.py`, `compute_fes.py`, `compute_fbs.py`, `compute_bleu_rouge.py` | C3 |
-| **7 · Round-Trip** | `run_csi_extraction.py`, `run_9a_surface_metrics.py`, `run_9c_csi_alignment.py`, `run_9d_llm_judge.py` | C4, C5.2 |
-
-### Metrics at a Glance
-
-| Phase | Metric | What it measures |
-|---|---|---|
-| 3 | **RF** (↓) | Salience-weighted residual source retention |
-| 3 | **TCT** (↑) | Salience-weighted target-culture transfer credit |
-| 3 | **SAT** (↓) | Unsupported cultural insertions relative to source salience |
-| 4 | **C2** (↑) | Weighted composite of five substitution quality dimensions |
-| 4 | **SW-C2** | Salience-weighted C2 |
-| 6 | **FES-C / FES-H** (↑) | Frame embedding cosine similarity (contextual / holistic) |
-| 6 | **FBS-C / FBS-H** (↑) | BERTScore-F1 over function frame text |
-| 6 | **FPS** (↑) | Structured LLM judgment of functional equivalence (stratified 16K) |
-| 7 | **Rec / Lk / Ms** | CSI recovered / leaked / missing in round-trip |
-| 7 | **Mn / St / Dt / Ov** | LLM judge: meaning, structure, detail, overall (0–10) |
-
----
-
-## Key Results
-
-### Output Integrity (Phase 2)
-
-Pass rates fracture along model origin and prompt structure. The simple prompt induces widespread meta-commentary failures in top models and collapses Sarvam further.
-
-| Model | CoT | 1-shot | Inst. | Simple | **All** |
-|---|---:|---:|---:|---:|---:|
-| Qwen2.5-72B | **96.3** | 95.9 | 95.8 | 14.4 | 75.6 |
-| Gemma-3-27B | 94.9 | **96.1** | **95.9** | 2.5 | 72.4 |
-| Llama-3.3-70B | 95.5 | 95.7 | 95.6 | 9.9 | 74.2 |
-| Mistral-7B | 91.7 | 94.7 | 85.5 | **49.5** | **80.3** |
-| Gemma-2-9B | 92.2 | 94.9 | 94.7 | 29.6 | 77.9 |
-| Llama-3.1-8B | 91.6 | 94.2 | 79.5 | 12.8 | 69.5 |
-| Aya-Expanse-32B | 73.2 | 21.2 | 3.3 | 27.6 | 31.3 |
-| Sarvam-30B | 12.8 | 9.6 | 4.5 | 14.7 | 10.4 |
-| *Overall* | 81.0 | 75.3 | 69.4 | 20.1 | 61.5 |
-
-### Adaptation Audit (Phase 3)
-
-RF, TCT, and SAT form a three-way trade-off rather than a single quality axis. Qwen's low RF traces to its 39.2% retention rate — model-intrinsic conservatism, not prompt sensitivity. Aya inserts nearly one unjustified Indian item per source CSI (SAT ≈ 1.0).
-
-| Model | RF ↓ | TCT ↑ | SAT ↓ | Loc% ↑ | Ret% ↓ |
-|---|---:|---:|---:|---:|---:|
-| Llama-3.3-70B | 0.055 | **0.903** | 0.660 | **77.0** | **19.4** |
-| Gemma-3-27B | 0.055 | 0.876 | 0.637 | 71.7 | 21.4 |
-| Sarvam-30B | **0.053** | 0.872 | **0.289** | 63.8 | 28.7 |
-| Llama-3.1-8B | 0.077 | 0.870 | 0.700 | 71.9 | 24.1 |
-| Gemma-2-9B | 0.073 | 0.840 | 0.515 | 65.3 | 27.1 |
-| Mistral-7B | 0.081 | 0.859 | 0.857 | 69.4 | 24.9 |
-| Aya-Expanse-32B | 0.074 | 0.852 | 0.997 | 67.2 | 25.4 |
-| Qwen2.5-72B | 0.122 | 0.799 | 0.313 | 57.5 | **39.2** |
-
-### Substitution Validity (Phase 4)
-
-Mean C2 = **0.6104** across 155,555 passing adaptations. All non-trivial failures reduce to two subtypes: C2.1 affordance violations (11.8%) and C2.2 scale transfer errors (21.8%). Qwen leads C2 (0.653) because retention bias suppresses substitution volume — its high score is an artifact of doing less. The salience-weighted degradation (Δ = −0.024) is uniform across models, confirming failures concentrate on high-salience CSIs.
-
-Unit/currency is the only genuinely hard category: mean C2 = 0.570 with a bimodal distribution reflecting all-or-nothing arithmetic outcomes.
-
-### Semantic Function Preservation (Phase 6)
-
-FES (0.54–0.56) and FBS (0.60) are stable across all slices. BLEU (0.04) and ROUGE-L (0.23) confirm function preservation cannot be reduced to surface overlap.
-
-| Model | FES-C ↑ | FES-H ↑ | FBS-C ↑ | FBS-H ↑ | FPS ↑ |
-|---|---:|---:|---:|---:|---:|
-| Gemma-3-27B | 0.544 | **0.566** | **0.603** | **0.605** | **0.660** |
-| Aya-Expanse-32B | **0.545** | 0.563 | **0.603** | 0.605 | 0.655 |
-| Sarvam-30B | 0.533 | **0.568** | 0.598 | 0.602 | 0.657 |
-| Mistral-7B | 0.544 | 0.561 | 0.604 | 0.604 | 0.654 |
-| Llama-3.3-70B | 0.536 | 0.556 | 0.599 | 0.601 | 0.648 |
-| Qwen2.5-72B | 0.533 | 0.559 | 0.599 | 0.602 | 0.645 |
-| *Global* | 0.540 | 0.560 | 0.601 | 0.603 | 0.650 |
-
-**Key finding:** audit poles Qwen (conservative) and Llama-3.3-70B (aggressive) converge in function space (FPS 0.645 vs. 0.648), confirming substitution quantity does not predict functional quality.
-
-### Round-Trip Consistency (Phase 7)
-
-Near-zero leakage (1.3%) shows the reverse pass reliably strips Indian CSIs. The high missing rate (30.7%) places the information bottleneck in the **forward** pass. Detail preservation collapses to 4.80/10 across every model and domain — the primary failure mode.
-
-| Slice | BLEU ↑ | ROUGE-L ↑ | BS-F1 ↑ | Rec ↑ | Lk ↓ | Ms ↓ | Detail ↑ | Overall ↑ |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Llama-3.3-70B | 0.618 | **0.750** | **0.868** | **0.726** | **0.008** | **0.290** | **5.26** | **7.82** |
-| Gemma-2-9B | **0.620** | 0.734 | 0.852 | 0.689 | 0.010 | 0.298 | 4.92 | 7.50 |
-| Mistral-7B | 0.495 | 0.676 | 0.835 | 0.714 | 0.020 | 0.319 | 4.44 | 7.17 |
-| One-shot | **0.739** | **0.859** | **0.928** | 0.634 | **0.003** | 0.295 | **5.34** | **7.93** |
-| CoT | 0.706 | 0.836 | 0.910 | 0.652 | 0.008 | **0.292** | 5.15 | 7.64 |
-| Simple | 0.163 | 0.351 | 0.651 | **0.910** | 0.036 | 0.355 | 3.57 | 6.56 |
-| *Global avg.* | 0.574 | 0.717 | 0.849 | 0.706 | 0.013 | 0.307 | 4.80 | 7.46 |
-
----
-
-## Repository Structure
-
-```
-.
-├── README.md                        ← this file
-├── requirements.txt                 ← pip dependencies
-├── environment.yml                  ← conda environment
-├── .env.example                     ← API key template
-├── .gitattributes
-├── .gitignore
-└── src/
-    ├── Dataset/                     ← benchmark construction
-    │   ├── 01_download.py
-    │   ├── 02_sieve_recipes.py
-    │   ├── 02_sieve_stories.py
-    │   ├── 03_process.py            ← 4-tier CSI detection (GPU)
-    │   ├── 04_diversity_sample.py
-    │   ├── 05_verify.py
-    │   ├── run_pipeline.sh
-    │   └── README.md
-    ├── Adaptations/                 ← forward & reverse generation
-    │   ├── adapt.py
-    │   ├── reverse_adapt.py
-    │   ├── model_{aya,gemma,gemma2,gpt4o,llama,llama8b,mistral,qwen,sarvam}.py
-    │   ├── run_adapt.sh
-    │   ├── run_reverse.sh
-    │   └── README.md
-    └── Framework/                   ← seven-phase evaluation
-        ├── build_index.py
-        ├── build_sample_ids_16k.py
-        ├── build_unified_scores.py
-        ├── prompts/                 ← prompt templates (.txt)
-        ├── 01_CSI_Extraction/
-        ├── 02_Hygiene/
-        ├── 03_Audit/
-        ├── 04_Validity/
-        ├── 05_Frames/
-        ├── 06_Analysis/
-        ├── 07_Reverse/
-        └── README.md
-```
-
-Each `src/` subdirectory has its own `README.md` with inputs, outputs, and usage.
+| Phase | Scripts | IAET | Key outputs |
+|---|---|---|---|
+| **1 · CSI Extraction** | `run_extraction.py`, `run_function_frames.py`, `run_wikidata_grounding.py` | C1–C5 setup | CSI spans + functional frames |
+| **2 · Output Integrity** | `run_hygiene.py`, `run_phase2.py` | C5.1 | Pass / fail labels per adaptation |
+| **3 · Adaptation Audit** | `run_audit.py`, `compute_csi_metrics.py` | C1 | RF, TCT, SAT metrics |
+| **4 · Substitution Validity** | `run_c2_judge.py`, `scale_checker.py` | C2 | C2 composite score |
+| **5 · Adapted Frames** | `build_dedup_pairs.py`, `run_adapted_frames.py`, `build_paired_frames.py` | C3 setup | Source↔adapted frame pairs |
+| **6 · Function Preservation** | `compute_fps.py`, `compute_fes.py`, `compute_fbs.py`, `compute_bleu_rouge.py` | C3 | FPS, FES, FBS, BLEU, ROUGE |
+| **7 · Round-Trip** | `run_csi_extraction.py`, `run_9a_surface_metrics.py`, `run_9c_csi_alignment.py`, `run_9d_llm_judge.py` | C4, C5.2 | CSI recovery, round-trip scores |
 
 ---
 
@@ -314,12 +161,23 @@ python -m spacy download en_core_web_trf
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in OPENAI_API_KEY and GOOGLE_APPLICATION_CREDENTIALS
+# Edit .env: fill in OPENAI_API_KEY and GOOGLE_APPLICATION_CREDENTIALS
 ```
 
-The adaptation scripts load `.env` from the repository root automatically. For framework phases, export the keys in your shell or activate the `.env` before running.
+The adaptation scripts load `.env` from the repository root automatically. For framework scripts, export the keys before running:
 
-### 4. (Optional) Download NLTK data
+```bash
+export $(grep -v '^#' .env | xargs)
+```
+
+### 4. Create data directories
+
+```bash
+mkdir -p 03_data/raw 03_data/processed/adapted_data 03_data/processed/reverse_adapted_data
+mkdir -p 04_experiments/logs
+```
+
+### 5. (Optional) Download NLTK data
 
 ```python
 import nltk
@@ -336,7 +194,7 @@ nltk.download('punkt_tab')
 python src/Dataset/01_download.py
 python src/Dataset/02_sieve_recipes.py
 python src/Dataset/02_sieve_stories.py
-bash   src/Dataset/run_pipeline.sh          # GPU; ~6–8 h on A100
+bash   src/Dataset/run_pipeline.sh          # GPU required; ~6–8 h on A100
 python src/Dataset/04_diversity_sample.py --datasets gsm8k rocstories dailydialog recipenlg
 python src/Dataset/05_verify.py
 ```
@@ -346,11 +204,11 @@ Output: `03_data/processed/benchmark.jsonl`
 ### Stage 1 — Generate adaptations
 
 ```bash
-bash src/Adaptations/run_adapt.sh      # forward (American→Indian); GPU
-bash src/Adaptations/run_reverse.sh    # reverse (Indian→American); GPU
+bash src/Adaptations/run_adapt.sh      # forward (American → Indian); GPU
+bash src/Adaptations/run_reverse.sh    # reverse (Indian → American); GPU
 ```
 
-For a smoke test (2 items/domain, no files written):
+Smoke test (2 items/domain, no files written):
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python src/Adaptations/adapt.py \
@@ -360,46 +218,39 @@ CUDA_VISIBLE_DEVICES=0 python src/Adaptations/adapt.py \
 ### Stage 2 — Evaluate
 
 ```bash
-# Index
 python src/Framework/build_index.py
 python src/Framework/build_sample_ids_16k.py
 
-# Phase 1
 python src/Framework/01_CSI_Extraction/run_extraction.py --backend google
 python src/Framework/01_CSI_Extraction/run_function_frames.py --backend google
 python src/Framework/01_CSI_Extraction/run_wikidata_grounding.py
 
-# Phase 2
 python src/Framework/02_Hygiene/run_hygiene.py
 python src/Framework/02_Hygiene/run_phase2.py --resume
 
-# Phase 3
 python src/Framework/03_Audit/run_audit.py
 python src/Framework/03_Audit/compute_csi_metrics.py
 
-# Phase 4
 python src/Framework/04_Validity/run_c2_judge.py
 
-# Phase 5
 python src/Framework/05_Frames/build_dedup_pairs.py
 python src/Framework/05_Frames/run_adapted_frames.py
 python src/Framework/05_Frames/build_paired_frames.py
 
-# Phase 6
 python src/Framework/06_Analysis/compute_fps.py
 python src/Framework/06_Analysis/compute_fes.py
 python src/Framework/06_Analysis/compute_fbs.py
 python src/Framework/06_Analysis/compute_bleu_rouge.py
 
-# Phase 7
 python src/Framework/07_Reverse/run_csi_extraction.py
 python src/Framework/07_Reverse/run_9a_surface_metrics.py
 python src/Framework/07_Reverse/run_9c_csi_alignment.py
 python src/Framework/07_Reverse/run_9d_llm_judge.py
 
-# Aggregate
 python src/Framework/build_unified_scores.py
 ```
+
+All framework scripts must be run **from the repository root** (`python src/Framework/...`), not from within their subdirectory.
 
 ---
 
@@ -411,7 +262,7 @@ Populated by running the pipeline; not committed to the repository.
 03_data/
 ├── raw/                                  ← source corpora from download step
 └── processed/
-    ├── benchmark.jsonl                   ← 6,000-item benchmark
+    ├── benchmark.jsonl                   ← 6,000-item annotated benchmark
     ├── adapted_data/
     │   └── runs/{strategy}/{model}_{domain}.jsonl
     └── reverse_adapted_data/
@@ -433,13 +284,13 @@ Populated by running the pipeline; not committed to the repository.
 | Phases 3, 4, 6 | GPT-4o | Audit, validity, FPS judge |
 | Phase 7 | Gemini 2.5 Pro | Round-trip LLM judge |
 
-Both APIs are called asynchronously with retry logic and configurable concurrency limits.
+Both APIs are called asynchronously with retry logic and configurable concurrency limits. All phases support `--pilot N` to run on the first N items for cost estimation.
 
 ### Hardware Requirements
 
 | Stage | Minimum | Notes |
 |---|---|---|
-| Dataset construction (Step 3) | 1× GPU, ≥16 GB VRAM | Qwen2.5-7B fp16 + spaCy transformer |
+| Dataset construction (step 3) | 1× GPU, ≥16 GB VRAM | Qwen2.5-7B fp16 + spaCy transformer |
 | Adaptation — 7B/8B/9B models | 1× GPU, ≥16 GB VRAM | tensor parallel = 1 |
 | Adaptation — 27B/32B models | 2× GPU, ≥32 GB VRAM each | tensor parallel = 2 |
 | Adaptation — 70B/72B (AWQ) | 2× GPU, ≥40 GB VRAM each | tensor parallel = 2 |
@@ -447,14 +298,13 @@ Both APIs are called asynchronously with retry logic and configurable concurrenc
 
 ---
 
-## Reproducibility Notes
+## Reproducibility
 
-- All pipeline scripts are **checkpoint-resumable**: interrupted runs can be restarted with `--resume` and will skip already-completed items.
-- Randomness is seeded (`PYTHONHASHSEED=42`, `random.seed(42)`) throughout.
+- All pipeline scripts are **checkpoint-resumable**: restart with `--resume` to skip completed items.
+- Randomness is seeded (`PYTHONHASHSEED=42`, `random.seed(42)`, `numpy.random.seed(42)`).
 - CUDA determinism is enforced via `CUBLAS_WORKSPACE_CONFIG=:4096:8`.
-- The one-shot exemplars are hand-crafted (one per domain) and included in `src/Adaptations/adapt.py`; no external exemplar dataset is required.
-- Wikidata grounding uses the public SPARQL endpoint (`query.wikidata.org`) with no authentication.
-- See `REPRODUCIBILITY.md` for step-by-step environment setup and common troubleshooting.
+- vLLM runs at `temperature=0.0` (greedy decoding).
+- See `REPRODUCIBILITY.md` for step-by-step environment setup and troubleshooting.
 
 ---
 
