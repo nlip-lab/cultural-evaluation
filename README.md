@@ -1,6 +1,11 @@
 # Lost in Localization: Benchmarking Intralingual Cultural Adaptation in Large Language Models
 
-> *Anonymous submission — EMNLP 2026*
+> Soumedhik Bharati<sup>1</sup>, Maharaj Brahma<sup>2</sup>, Maunendra Sankar Desarkar<sup>2</sup>
+>
+> <sup>1</sup>Mohamed bin Zayed University of Artificial Intelligence, UAE
+> <sup>2</sup>Natural Language and Information Processing Lab (NLIP), IIT Hyderabad, India
+>
+> `soumedhik.bharati@mbzuai.ac.ae` · `cs23resch01004@iith.ac.in` · `maunendra@cse.iith.ac.in`
 
 ---
 
@@ -311,13 +316,12 @@ Both APIs are called asynchronously with retry logic and configurable concurrenc
 ## Citation
 
 ```bibtex
-@inproceedings{anonymous2025lostinlocalization,
+@inproceedings{bharati2026lostinlocalization,
   title     = {Lost in Localization: Benchmarking Intralingual Cultural Adaptation
                in Large Language Models},
-  author    = {Anonymous Authors},
+  author    = {Bharati, Soumedhik and Brahma, Maharaj and Desarkar, Maunendra Sankar},
   booktitle = {Proceedings of the 2026 Conference on Empirical Methods in
                Natural Language Processing (EMNLP 2026)},
-  year      = {2026},
-  note      = {Anonymous submission}
+  year      = {2026}
 }
 ```

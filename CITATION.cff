@@ -9,7 +9,18 @@ abstract: >
   instruction-tuned LLMs, and a seven-phase CSI-level evaluation framework
   grounded in the Intercultural Adaptation Error Taxonomy (IAET).
 authors:
-  - name: "Anonymous Authors"
+  - given-names: "Soumedhik"
+    family-names: "Bharati"
+    affiliation: "Mohamed bin Zayed University of Artificial Intelligence"
+    email: "soumedhik.bharati@mbzuai.ac.ae"
+  - given-names: "Maharaj"
+    family-names: "Brahma"
+    affiliation: "IIT Hyderabad"
+    email: "cs23resch01004@iith.ac.in"
+  - given-names: "Maunendra Sankar"
+    family-names: "Desarkar"
+    affiliation: "IIT Hyderabad"
+    email: "maunendra@cse.iith.ac.in"
 keywords:
   - cultural adaptation
   - natural language processing
@@ -23,9 +34,19 @@ preferred-citation:
   type: conference-paper
   title: "Lost in Localization: Benchmarking Intralingual Cultural Adaptation in Large Language Models"
   authors:
-    - name: "Anonymous Authors"
+    - given-names: "Soumedhik"
+      family-names: "Bharati"
+      affiliation: "Mohamed bin Zayed University of Artificial Intelligence"
+      email: "soumedhik.bharati@mbzuai.ac.ae"
+    - given-names: "Maharaj"
+      family-names: "Brahma"
+      affiliation: "IIT Hyderabad"
+      email: "cs23resch01004@iith.ac.in"
+    - given-names: "Maunendra Sankar"
+      family-names: "Desarkar"
+      affiliation: "IIT Hyderabad"
+      email: "maunendra@cse.iith.ac.in"
   conference:
     name: "Conference on Empirical Methods in Natural Language Processing"
     abbreviation: EMNLP
   year: 2026
-  notes: "Anonymous submission"
