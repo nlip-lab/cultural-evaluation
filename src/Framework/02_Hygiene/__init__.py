@@ -7,7 +7,7 @@ Fast, deterministic checks for adapted text quality:
 - Refusal detection
 - Degeneration checks (empty, truncated, repetitive)
 - Length ratio analysis
-- Overall classification (pass / fail_soft / fail_hard) with IAET labels
+- Overall classification (pass / fail_soft / fail_hard) with CRAFT labels
 
 Usage:
     from hygiene_checker import check

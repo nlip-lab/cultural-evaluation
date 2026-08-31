@@ -171,7 +171,7 @@ class HygieneChecker:
             "length_ratio": None,
             "length_check": None,
             "overall": None,
-            "iaet_label": None,
+            "craft_label": None,
             "failure_reason": None,
         }
 
@@ -195,7 +195,7 @@ class HygieneChecker:
             result, adapted_text, result["length_ratio"]
         )
         result["overall"] = overall
-        result["iaet_label"] = label
+        result["craft_label"] = label
         result["failure_reason"] = reason
 
         return result
@@ -284,10 +284,10 @@ class HygieneChecker:
         self, checks: dict, adapted_text: str, length_ratio: float
     ) -> tuple[str, Optional[str], Optional[str]]:
         """
-        Classify overall hygiene and assign IAET label.
+        Classify overall hygiene and assign CRAFT label.
 
         Returns:
-            (overall: str, iaet_label: str|None, failure_reason: str|None)
+            (overall: str, craft_label: str|None, failure_reason: str|None)
         """
 
         if checks["lang_check"] == "fail_non_english":

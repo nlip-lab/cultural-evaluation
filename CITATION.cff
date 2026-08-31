@@ -3,11 +3,25 @@ message: "If you use this code or benchmark, please cite the paper below."
 type: software
 title: "Lost in Localization: Benchmarking Intralingual Cultural Adaptation in Large Language Models"
 abstract: >
-  CulturalAdapt-6K is a 6,000-item benchmark for evaluating function-preserving
-  intralingual cultural adaptation (American→Indian). This repository contains
-  the dataset construction pipeline, adaptation generation code for eight
-  instruction-tuned LLMs, and a seven-phase CSI-level evaluation framework
-  grounded in the Intercultural Adaptation Error Taxonomy (IAET).
+  Cultural adaptation, rewriting text for a different cultural audience,
+  requires more than lexical substitution. A model must decide what to
+  change, whether each replacement is locally valid, and whether it
+  preserves the original item's functional role. We formalize this as
+  function-preserving cultural transfer and introduce a dataset, a
+  taxonomy, and an evaluation framework constructed around that principle.
+  CulturalAdapt-6K identifies 6,000 culturally rich texts in four discourse
+  domains, while the Cultural Rewriting and Adaptation Failure Taxonomy
+  (CRAFT) classifies errors into five categories. To mitigate the
+  Anglocentric priors of current models, our proposed framework anchors
+  each culturally significant item in a Wikidata-linked function frame,
+  capturing its contextual role rather than surface denotation. Across
+  191,968 adaptations by eight instruction-tuned LLMs, we find that the
+  models that substitute the most are not the ones that substitute best.
+  High localization increases failure exposure, while conservative
+  retention increases validity scores, yet both converge to the same
+  overall functional quality. Current generative models can certainly
+  dress text in a target culture's vocabulary but ultimately cannot
+  reliably preserve the contextual roles the vocabulary is meant to serve.
 authors:
   - given-names: "Soumedhik"
     family-names: "Bharati"

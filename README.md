@@ -20,8 +20,8 @@ The project has three components:
 | Component | Description |
 |---|---|
 | **CulturalAdapt-6K** | 6,000 American-source texts across four discourse domains with CSI-level annotations |
-| **IAET** | Intercultural Adaptation Error Taxonomy — 21 subtypes across 5 stage-aligned error categories |
-| **Evaluation pipeline** | Seven-phase, CSI-level evaluation framework operationalizing each IAET category |
+| **CRAFT** | Cultural Rewriting and Adaptation Failure Taxonomy — 21 subtypes across 5 stage-aligned error categories |
+| **Evaluation pipeline** | Seven-phase, CSI-level evaluation framework operationalizing each CRAFT category |
 
 ---
 
@@ -86,7 +86,7 @@ Each CSI carries: category, adaptation necessity (`must_adapt` / `may_adapt` / `
 
 ---
 
-## Error Taxonomy (IAET)
+## Error Taxonomy (CRAFT)
 
 | Category | Subtypes | Severity |
 |---|---|:---:|
@@ -130,9 +130,9 @@ GPT-4o is also supported via the OpenAI API (`model_gpt4o.py`).
 
 ## Evaluation Pipeline
 
-Seven sequential phases, each operationalizing one or more IAET categories:
+Seven sequential phases, each operationalizing one or more CRAFT categories:
 
-| Phase | Scripts | IAET | Key outputs |
+| Phase | Scripts | CRAFT | Key outputs |
 |---|---|---|---|
 | **1 · CSI Extraction** | `run_extraction.py`, `run_function_frames.py`, `run_wikidata_grounding.py` | C1–C5 setup | CSI spans + functional frames |
 | **2 · Output Integrity** | `run_hygiene.py`, `run_phase2.py` | C5.1 | Pass / fail labels per adaptation |

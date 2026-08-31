@@ -108,8 +108,8 @@ def main():
                 refusal_dist[hygiene["refusal"]] += 1
                 length_dist[hygiene["length_check"]] += 1
                 domain_dist[domain] += 1
-                if hygiene["iaet_label"]:
-                    label_dist[hygiene["iaet_label"]] += 1
+                if hygiene["craft_label"]:
+                    label_dist[hygiene["craft_label"]] += 1
 
             except Exception as e:
                 errors += 1
@@ -133,7 +133,7 @@ def main():
         "meta_commentary_distribution": dict(meta_dist),
         "refusal_distribution": dict(refusal_dist),
         "length_check_distribution": dict(length_dist),
-        "iaet_label_distribution": dict(label_dist),
+        "craft_label_distribution": dict(label_dist),
         "domain_distribution": dict(domain_dist),
     }
 
@@ -163,7 +163,7 @@ def main():
         pct = 100 * count / written if written else 0
         print(f"    {status:<20} {count:>6,}  ({pct:>5.1f}%)")
 
-    print(f"\n  IAET failure labels (hard failures only):")
+    print(f"\n  CRAFT failure labels (hard failures only):")
     for label in sorted(label_dist.keys()):
         count = label_dist[label]
         print(f"    {label:<20} {count:>6,}")

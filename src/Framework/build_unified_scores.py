@@ -148,7 +148,7 @@ def main():
         h = r.get("02_hygiene", {})
         hygiene_by_eval[r["eval_id"]] = {
             "hygiene_overall": h.get("overall"),
-            "hygiene_iaet_label": h.get("iaet_label"),
+            "hygiene_craft_label": h.get("craft_label"),
         }
 
     phase3_by_eval = {
@@ -308,7 +308,7 @@ def main():
                 "source_text": base.get("source_text"),
                 "adapted_text": base.get("adapted_text"),
                 "hygiene_overall": hygiene.get("hygiene_overall"),
-                "hygiene_iaet_label": hygiene.get("hygiene_iaet_label"),
+                "hygiene_craft_label": hygiene.get("hygiene_craft_label"),
                 "rf": p3.get("rf"),
                 "tct": p3.get("tct"),
                 "sat": p3.get("sat"),
@@ -342,7 +342,7 @@ def main():
                 "c1_score": None,
                 "c5_score": None,
                 "inca_score": None,
-                "primary_iaet_label": None,
+                "primary_craft_label": None,
             }
             fout.write(json.dumps(unified, ensure_ascii=False) + "\n")
 

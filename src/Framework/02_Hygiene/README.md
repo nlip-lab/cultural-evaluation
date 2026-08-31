@@ -6,7 +6,7 @@
 
 1. `hygiene_checker.py`:
 - Runs deterministic checks for language validity, refusals, degeneration, meta-commentary, and length ratio.
-- Produces an overall label: `pass`, `fail_soft`, or `fail_hard`, with optional IAET label.
+- Produces an overall label: `pass`, `fail_soft`, or `fail_hard`, with optional CRAFT label.
 
 2. `run_hygiene.py`:
 - Applies hygiene checks to indexed adaptations.

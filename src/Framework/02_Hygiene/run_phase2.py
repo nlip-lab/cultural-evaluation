@@ -83,7 +83,7 @@ class StatsAccumulator:
                 self.fail_type["C5.1_degenerate"] += 1
             elif h["refusal"] == "flagged":
                 self.fail_type["C5.1_refusal"] += 1
-            elif h.get("iaet_label") == "C1.4":
+            elif h.get("craft_label") == "C1.4":
                 self.fail_type["C1.4_meta_only"] += 1
             else:
                 self.fail_type["C5.1_other"] += 1
@@ -327,7 +327,7 @@ def main():
                 print(f"       overall={h['overall']}  lang={h['lang_check']}"
                       f"  degen={h['degeneration']}  meta={h['meta_commentary']}")
                 print(f"       ratio={h['length_ratio']:.2f}  "
-                      f"iaet={h['iaet_label']}  reason={h['failure_reason']}")
+                      f"craft={h['craft_label']}  reason={h['failure_reason']}")
 
 if __name__ == "__main__":
     main()
