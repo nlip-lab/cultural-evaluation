@@ -1,5 +1,7 @@
 # Lost in Localization: Benchmarking Intralingual Cultural Adaptation in Large Language Models
 
+> *Findings of the Association for Computational Linguistics: EMNLP 2026*
+>
 > Soumedhik Bharati<sup>1</sup>, Maharaj Brahma<sup>2</sup>, Maunendra Sankar Desarkar<sup>2</sup>
 >
 > <sup>1</sup>Mohamed bin Zayed University of Artificial Intelligence, UAE
@@ -28,7 +30,9 @@ The project has three components:
 ```
 .
 ├── README.md
+├── CITATION.cff
 ├── REPRODUCIBILITY.md           ← step-by-step environment and run guide
+├── CULTURE-ADAPT-6k.jsonl       ← 6,000-item annotated benchmark (see below)
 ├── requirements.txt             ← pip dependencies
 ├── environment.yml              ← conda environment (Python 3.10, CUDA 11.8)
 ├── .env.example                 ← API key template
@@ -261,13 +265,17 @@ All framework scripts must be run **from the repository root** (`python src/Fram
 
 ## Data Layout
 
-Populated by running the pipeline; not committed to the repository.
+`CULTURE-ADAPT-6k.jsonl` (the 6,000-item annotated benchmark) is committed at the
+repository root. Everything else below is populated by running the pipeline and
+is not committed to the repository.
 
 ```
+CULTURE-ADAPT-6k.jsonl                      ← 6,000-item annotated benchmark (committed)
+
 03_data/
 ├── raw/                                  ← source corpora from download step
 └── processed/
-    ├── benchmark.jsonl                   ← 6,000-item annotated benchmark
+    ├── benchmark.jsonl                   ← pipeline output copy of the benchmark
     ├── adapted_data/
     │   └── runs/{strategy}/{model}_{domain}.jsonl
     └── reverse_adapted_data/
@@ -320,8 +328,7 @@ Both APIs are called asynchronously with retry logic and configurable concurrenc
   title     = {Lost in Localization: Benchmarking Intralingual Cultural Adaptation
                in Large Language Models},
   author    = {Bharati, Soumedhik and Brahma, Maharaj and Desarkar, Maunendra Sankar},
-  booktitle = {Proceedings of the 2026 Conference on Empirical Methods in
-               Natural Language Processing (EMNLP 2026)},
+  booktitle = {Findings of the Association for Computational Linguistics: EMNLP 2026},
   year      = {2026}
 }
 ```
