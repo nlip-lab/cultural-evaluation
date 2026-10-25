@@ -197,7 +197,7 @@ nltk.download('punkt_tab')
 
 ## Running the Full Pipeline
 
-### Stage 0 — Build the benchmark
+### Stage 0: Build the benchmark
 
 ```bash
 python src/Dataset/01_download.py
@@ -210,7 +210,7 @@ python src/Dataset/05_verify.py
 
 Output: `03_data/processed/benchmark.jsonl`
 
-### Stage 1 — Generate adaptations
+### Stage 1: Generate adaptations
 
 ```bash
 bash src/Adaptations/run_adapt.sh      # forward (American → Indian); GPU
@@ -224,7 +224,7 @@ CUDA_VISIBLE_DEVICES=0 python src/Adaptations/adapt.py \
     --model mistral --prompt_level simple --smoke_test
 ```
 
-### Stage 2 — Evaluate
+### Stage 2: Evaluate
 
 ```bash
 python src/Framework/build_index.py
